@@ -180,18 +180,32 @@
           state.snippets = d.codeSnippets || [];
           const langs = state.snippets.map((s) => `<option value="${esc(s.langSlug)}">${esc(s.lang)}</option>`).join("");
           $("#detailPane").innerHTML = `
-            <h2>${d.frontendQuestionId}. ${esc(d.title || d.titleCn || slug)} <span class="${diffClass(d.difficulty)}" style="font-size:13px">${esc(d.difficulty || "")}</span></h2>
+            <h2>${d.frontendQuestionId}. ${esc(d.titleCn || d.title || slug)} <span class="${diffClass(d.difficulty)}" style="font-size:13px">${esc(d.difficulty || "")}</span></h2>
             <div class="content">${d.content || ""}</div>
             <div class="editor">
               <div class="row">
                 <select id="lang">${langs}</select>
                 <button id="runBtn" type="button">运行</button>
                 <button id="submitBtn" class="primary" type="button">提交</button>
+                <button id="favBtn" type="button">${d.userStatus === "AC" || d.isFavor ? "★ 已收藏" : "☆ 收藏"}</button>
+                <button id="histBtn" type="button">提交历史</button>
                 <span class="muted" id="editorHint"></span>
               </div>
               <textarea class="code" id="code" spellcheck="false"></textarea>
               <div id="result" class="result hidden"></div>
+              <div id="history" class="result hidden"></div>
             </div>`;
+          $("#favBtn").addEventListener("click", async () => {
+            const b = $("#favBtn"); b.disabled = true;
+            try { await call("leetcode/toggle_favorite", { titleSlug: slug, favorite: true }, 30000); b.textContent = "★ 已收藏"; $("#editorHint").textContent = "已收藏（未验证接口，若无效请告知）"; }
+            catch (e) { $("#editorHint").textContent = "收藏失败：" + e.message; }
+            finally { b.disabled = false; }
+          });
+          $("#histBtn").addEventListener("click", async () => {
+            const box = $("#history"); box.classList.remove("hidden"); box.textContent = "加载提交历史…";
+            try { const h = await call("leetcode/submission_list", { titleSlug: slug }, 30000); box.textContent = JSON.stringify(h, null, 2).slice(0, 2000); }
+            catch (e) { box.textContent = "提交历史加载失败（未验证接口）：" + e.message; }
+          });
           const fillSnippet = () => {
             const slugVal = $("#lang").value;
             const snip = state.snippets.find((s) => s.langSlug === slugVal);

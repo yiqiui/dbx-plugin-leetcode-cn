@@ -1,0 +1,47 @@
+{
+  "$schema": "../manifest.schema.json",
+  "manifest_version": 1,
+  "id": "com.yiqiui.leetcode-cn",
+  "name": "LeetCode 刷题",
+  "icon": "assets/plugin.svg",
+  "version": "0.1.0",
+  "publisher": "yiqiui",
+  "description": "在 DBX 插件中心登录力扣（leetcode.cn）账号，浏览题库、查看题面、选择语言编写代码并运行 / 提交判题。",
+  "source": "https://github.com/yiqiui/dbx",
+  "homepage": "https://leetcode.cn",
+  "engines": {
+    "dbx": ">=0.5.68",
+    "host_api": "1"
+  },
+  "permissions": ["host.workbench", "host.binary"],
+  "entrypoints": {
+    "backend": {
+      "executable": "bin/dbx-leetcode-cn"
+    },
+    "ui": {
+      "root": "ui",
+      "entry": "ui/index.html"
+    }
+  },
+  "contributions": [
+    {
+      "type": "workbench",
+      "id": "com.yiqiui.leetcode-cn.workbench",
+      "label": "LeetCode 刷题",
+      "description": "力扣题库浏览与在线判题工作台。",
+      "icon": "assets/plugin.svg"
+    }
+  ],
+  "localizations": {
+    "en": {
+      "name": "LeetCode Practice",
+      "description": "Sign in to leetcode.cn, browse the problem set, read problems, pick a language, and run / submit code for judging.",
+      "contributions": {
+        "com.yiqiui.leetcode-cn.workbench": {
+          "label": "LeetCode Practice",
+          "description": "A leetcode.cn problem browser and online judge workbench."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>LeetCode 刷题</title>
+    <style>
+      :root { color-scheme: light dark; font-family: Inter, ui-sans-serif, system-ui, "Microsoft YaHei", sans-serif; --brand: #ffb100; --border: color-mix(in srgb, CanvasText 14%, transparent); --muted: color-mix(in srgb, CanvasText 60%, transparent); }
+      * { box-sizing: border-box; }
+      body { margin: 0; height: 100vh; display: flex; flex-direction: column; background: Canvas; color: CanvasText; font-size: 13px; }
+      header { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+      header .brand { font-weight: 700; color: var(--brand); }
+      header .spacer { flex: 1; }
+      header .who { color: var(--muted); }
+      button { border: 1px solid var(--border); background: color-mix(in srgb, CanvasText 6%, transparent); color: inherit; border-radius: 8px; padding: 5px 12px; font: inherit; cursor: pointer; }
+      button:hover { background: color-mix(in srgb, CanvasText 12%, transparent); }
+      button:disabled { opacity: .5; cursor: wait; }
+      button.primary { background: var(--brand); color: #1a1400; border-color: transparent; font-weight: 650; }
+      input, select, textarea { font: inherit; color: inherit; background: color-mix(in srgb, CanvasText 4%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 6px 9px; }
+      .row { display: flex; align-items: center; gap: 8px; }
+      main { flex: 1; min-height: 0; display: grid; grid-template-columns: 380px 1fr; }
+      .pane { min-height: 0; overflow: auto; }
+      #listPane { border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+      .toolbar { padding: 8px 10px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
+      .toolbar input { flex: 1; min-width: 0; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+      th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: Canvas; }
+      td.title { white-space: normal; }
+      tr.q { cursor: pointer; }
+      tr.q:hover { background: color-mix(in srgb, CanvasText 6%, transparent); }
+      tr.q.active { background: color-mix(in srgb, var(--brand) 18%, transparent); }
+      .diff-Easy { color: #26a641; } .diff-Medium { color: #ffd700; } .diff-Hard { color: #ff375f; }
+      .ac { color: #26a641; }
+      #detailPane { padding: 14px 18px; }
+      #detailPane h2 { margin: 0 0 4px; font-size: 18px; }
+      .content { line-height: 1.7; }
+      .content pre, .content code { background: color-mix(in srgb, CanvasText 8%, transparent); border-radius: 6px; padding: 1px 5px; }
+      .content pre { padding: 10px; overflow: auto; }
+      .editor { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+      textarea.code { width: 100%; min-height: 260px; font-family: ui-monospace, Consolas, monospace; resize: vertical; }
+      .result { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; }
+      .result.ok { border-color: #26a641; } .result.bad { border-color: #ff375f; }
+      .muted { color: var(--muted); }
+      .hidden { display: none !important; }
+      #login { position: absolute; inset: 0; display: grid; place-items: center; background: Canvas; z-index: 5; }
+      #login .card { width: min(360px, 90%); display: flex; flex-direction: column; gap: 12px; padding: 26px; border: 1px solid var(--border); border-radius: 16px; }
+      .mode-tabs { display: flex; gap: 6px; }
+      .mode-tab { flex: 1; border: 1px solid var(--border); background: transparent; border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer; color: var(--muted); }
+      .mode-tab.active { background: var(--brand); color: #1a1400; border-color: transparent; font-weight: 650; }
+      .status { padding: 10px 14px; }
+    </style>
+  </head>
+  <body>
+    <div id="login">
+      <div class="card">
+        <div class="brand" style="font-size:18px;font-weight:800;color:var(--brand)">LeetCode 登录</div>
+        <div class="mode-tabs">
+          <button type="button" class="mode-tab active" data-mode="password">密码登录</button>
+          <button type="button" class="mode-tab" data-mode="code">验证码登录</button>
+          <button type="button" class="mode-tab" data-mode="cookie">Cookie 登录</button>
+        </div>
+        <div class="muted" style="font-size:12px">凭据仅用于本次会话的登录请求。密码/验证码登录可能受 leetcode.cn 极验/风控限制；Cookie 登录最稳。</div>
+        <input id="loginUser" autocomplete="username" placeholder="用户名 / 邮箱 / 手机号" />
+        <div id="pwdRow"><input id="loginPass" type="password" autocomplete="current-password" placeholder="密码" /></div>
+        <div id="codeRow" class="hidden">
+          <div class="row"><input id="loginCode" placeholder="验证码" style="flex:1" /><button type="button" id="sendCodeBtn">发送验证码</button></div>
+        </div>
+        <div id="cookieRow" class="hidden">
+          <button type="button" id="autoCookieBtn" style="width:100%">一键登录：读取本机浏览器 Cookie（需已在 Chrome/Edge/Firefox 登录 leetcode.cn）</button>
+          <input id="cookieSession" placeholder="LEETCODE_SESSION（自动读取失败时可手动粘贴）" />
+          <input id="cookieCsrf" placeholder="csrftoken（可留空）" />
+        </div>
+        <div id="loginMsg" class="muted"></div>
+        <button class="primary" id="loginBtn" type="button">登录</button>
+      </div>
+    </div>
+
+    <header>
+      <span class="brand">LeetCode 刷题</span>
+      <div class="spacer"></div>
+      <span class="who" id="who"></span>
+      <button id="refreshBtn" type="button">刷新题库</button>
+      <button id="logoutBtn" type="button">退出</button>
+    </header>
+
+    <main>
+      <section class="pane" id="listPane">
+        <div class="toolbar">
+          <input id="search" placeholder="搜索题目标题 / 题号" />
+          <select id="difficulty">
+            <option value="">全部难度</option>
+            <option value="EASY">简单</option>
+            <option value="MEDIUM">中等</option>
+            <option value="HARD">困难</option>
+          </select>
+        </div>
+        <div id="listStatus" class="status muted">未登录</div>
+        <table id="qtable" class="hidden">
+          <thead><tr><th></th><th>Title</th><th>AC</th><th>难度</th></tr></thead>
+          <tbody id="qbody"></tbody>
+        </table>
+        <div style="padding:10px"><button id="moreBtn" class="hidden" type="button">加载更多</button></div>
+      </section>
+
+      <section class="pane" id="detailPane">
+        <div class="muted">从左侧选择一道题开始。</div>
+      </section>
+    </main>
+
+    <script>
+      const $ = (sel) => document.querySelector(sel);
+      const state = { questions: [], skip: 0, limit: 30, total: 0, activeSlug: null, snippets: [], loading: false };
+
+      async function call(method, params, timeoutMs) {
+        const res = await window.dbxPlugin.request("backend.invoke", { method, params: params || {}, timeoutMs: timeoutMs || 60000 });
+        return res;
+      }
+      const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+      const diffClass = (d) => "diff-" + String(d || "").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+
+      function renderList() {
+        const body = $("#qbody");
+        body.innerHTML = state.questions.map((q) => `
+          <tr class="q ${q.titleSlug === state.activeSlug ? "active" : ""}" data-slug="${esc(q.titleSlug)}">
+            <td>${q.ac ? '<span class="ac">✓</span>' : ""}</td>
+            <td class="title">[${q.frontendQuestionId}] ${esc(q.title || q.titleCn || q.titleSlug)}</td>
+            <td>${q.acRate != null ? (q.acRate * 100).toFixed(1) + "%" : "-"}</td>
+            <td class="${diffClass(q.difficulty)}">${esc(q.difficulty || "")}</td>
+          </tr>`).join("");
+        body.querySelectorAll("tr.q").forEach((tr) => tr.addEventListener("click", () => openProblem(tr.dataset.slug)));
+        $("#moreBtn").classList.toggle("hidden", state.questions.length >= state.total);
+      }
+
+      async function loadProblems(reset) {
+        if (state.loading) return;
+        state.loading = true;
+        if (reset) { state.skip = 0; state.questions = []; }
+        $("#listStatus").textContent = "加载中…";
+        try {
+          const filters = {};
+          if ($("#difficulty").value) filters.difficulty = $("#difficulty").value;
+          const search = $("#search").value.trim();
+          if (search) filters.search = search;
+          const data = await call("leetcode/list_problems", { skip: state.skip, limit: state.limit, filters });
+          state.questions = state.questions.concat(data.questions || []);
+          state.total = data.total || state.questions.length;
+          state.skip += (data.questions || []).length;
+          $("#qtable").classList.remove("hidden");
+          $("#listStatus").textContent = `共 ${state.total} 题，已加载 ${state.questions.length}`;
+          renderList();
+        } catch (e) {
+          $("#listStatus").textContent = "加载失败：" + e.message;
+        } finally { state.loading = false; }
+      }
+
+      async function openProblem(slug) {
+        state.activeSlug = slug; renderList();
+        $("#detailPane").innerHTML = '<div class="muted">题面加载中…</div>';
+        try {
+          const d = await call("leetcode/get_problem", { titleSlug: slug });
+          state.snippets = d.codeSnippets || [];
+          const langs = state.snippets.map((s) => `<option value="${esc(s.langSlug)}">${esc(s.lang)}</option>`).join("");
+          $("#detailPane").innerHTML = `
+            <h2>${d.frontendQuestionId}. ${esc(d.title || d.titleCn || slug)} <span class="${diffClass(d.difficulty)}" style="font-size:13px">${esc(d.difficulty || "")}</span></h2>
+            <div class="content">${d.content || ""}</div>
+            <div class="editor">
+              <div class="row">
+                <select id="lang">${langs}</select>
+                <button id="runBtn" type="button">运行</button>
+                <button id="submitBtn" class="primary" type="button">提交</button>
+                <span class="muted" id="editorHint"></span>
+              </div>
+              <textarea class="code" id="code" spellcheck="false"></textarea>
+              <div id="result" class="result hidden"></div>
+            </div>`;
+          const fillSnippet = () => {
+            const slugVal = $("#lang").value;
+            const snip = state.snippets.find((s) => s.langSlug === slugVal);
+            $("#code").value = snip ? snip.code : "";
+          };
+          $("#lang").addEventListener("change", fillSnippet);
+          fillSnippet();
+          $("#runBtn").addEventListener("click", () => judge("run"));
+          $("#submitBtn").addEventListener("click", () => judge("submit"));
+        } catch (e) {
+          $("#detailPane").innerHTML = '<div class="result bad">题面加载失败：' + esc(e.message) + "</div>";
+        }
+      }
+
+      async function judge(mode) {
+        const btn = mode === "run" ? $("#runBtn") : $("#submitBtn");
+        const box = $("#result");
+        btn.disabled = true; box.classList.remove("hidden", "ok", "bad"); box.textContent = mode === "run" ? "运行中…" : "提交判题中…";
+        try {
+          const method = mode === "run" ? "leetcode/run_code" : "leetcode/submit_code";
+          const r = await call(method, { titleSlug: state.activeSlug, lang: $("#lang").value, code: $("#code").value, inputs: (window.__sample || "") }, 120000);
+          const ok = r.status === "Accepted";
+          box.classList.add(ok ? "ok" : "bad");
+          box.textContent = [
+            `状态：${r.statusLabel || r.status || "-"}`,
+            r.runtime ? `执行用时：${r.runtime}` : "",
+            r.memory ? `内存消耗：${r.memory}` : "",
+            r.expectedOutput ? `期望输出：\n${r.expectedOutput}` : "",
+            r.codeOutput ? `输出：\n${r.codeOutput}` : "",
+            r.compileError ? `编译错误：\n${r.compileError}` : "",
+            r.error ? `错误：\n${r.error}` : "",
+            r.message && !r.compileError ? `${r.message}` : "",
+          ].filter(Boolean).join("\n");
+        } catch (e) {
+          box.classList.add("bad"); box.textContent = "失败：" + e.message;
+        } finally { btn.disabled = false; }
+      }
+
+      let loginMode = "password";
+
+      function afterLogin(r, label) {
+        $("#login").classList.add("hidden");
+        $("#who").textContent = "已登录：" + ((r && r.username) || label);
+        return loadProblems(true);
+      }
+
+      async function doLogin(user, pass) {
+        if (!user || !pass) { $("#loginMsg").textContent = "请输入账号和密码"; return; }
+        $("#loginBtn").disabled = true; $("#loginMsg").textContent = "登录中…";
+        try { afterLogin(await call("leetcode/login", { login: user, password: pass }, 60000), user); }
+        catch (e) { $("#loginMsg").textContent = "登录失败：" + e.message; }
+        finally { $("#loginBtn").disabled = false; }
+      }
+
+      async function doLoginCode(target, code) {
+        if (!target || !code) { $("#loginMsg").textContent = "请输入手机号/邮箱和验证码"; return; }
+        $("#loginBtn").disabled = true; $("#loginMsg").textContent = "登录中…";
+        try { afterLogin(await call("leetcode/login_code", { target, code }, 60000), target); }
+        catch (e) { $("#loginMsg").textContent = "登录失败：" + e.message; }
+        finally { $("#loginBtn").disabled = false; }
+      }
+
+      async function sendCode() {
+        const target = $("#loginUser").value.trim();
+        if (!target) { $("#loginMsg").textContent = "请先填写手机号 / 邮箱"; return; }
+        $("#sendCodeBtn").disabled = true; $("#loginMsg").textContent = "发送验证码中…（可能需要通过极验滑块）";
+        try { await call("leetcode/send_code", { target }, 60000); $("#loginMsg").textContent = "验证码已发送，请查收。"; }
+        catch (e) { $("#loginMsg").textContent = "发送失败：" + e.message; }
+        finally { $("#sendCodeBtn").disabled = false; }
+      }
+
+      async function doLoginCookie(session, csrf) {
+        if (!session) { $("#loginMsg").textContent = "请粘贴 LEETCODE_SESSION 或点上方「一键登录」"; return; }
+        $("#loginBtn").disabled = true; $("#loginMsg").textContent = "校验 Cookie 中…";
+        try { afterLogin(await call("leetcode/login_cookie", { session, csrf }, 30000), "cookie"); }
+        catch (e) { $("#loginMsg").textContent = "登录失败：" + e.message; }
+        finally { $("#loginBtn").disabled = false; }
+      }
+
+      async function doAutoLogin() {
+        $("#autoCookieBtn").disabled = true; $("#loginMsg").textContent = "正在读取本机浏览器 Cookie…";
+        try {
+          const r = await call("leetcode/login_auto", {}, 45000);
+          afterLogin(r, r.browser || "cookie");
+        } catch (e) {
+          $("#loginMsg").textContent = "一键登录失败：" + e.message + "（可改为手动粘贴 LEETCODE_SESSION / csrftoken）";
+        } finally { $("#autoCookieBtn").disabled = false; }
+      }
+
+      function submitLogin() {
+        const user = $("#loginUser").value.trim();
+        if (loginMode === "password") doLogin(user, $("#loginPass").value);
+        else if (loginMode === "code") doLoginCode(user, $("#loginCode").value.trim());
+        else doLoginCookie($("#cookieSession").value.trim(), $("#cookieCsrf").value.trim());
+      }
+
+      document.querySelectorAll(".mode-tab").forEach((tab) => tab.addEventListener("click", () => {
+        loginMode = tab.dataset.mode;
+        document.querySelectorAll(".mode-tab").forEach((t) => t.classList.toggle("active", t === tab));
+        $("#pwdRow").classList.toggle("hidden", loginMode !== "password");
+        $("#codeRow").classList.toggle("hidden", loginMode !== "code");
+        $("#cookieRow").classList.toggle("hidden", loginMode !== "cookie");
+        $("#loginUser").classList.toggle("hidden", loginMode === "cookie");
+        $("#loginMsg").textContent = "";
+      }));
+      $("#loginBtn").addEventListener("click", submitLogin);
+      $("#sendCodeBtn").addEventListener("click", sendCode);
+      $("#autoCookieBtn").addEventListener("click", doAutoLogin);
+      ["loginUser", "loginPass", "loginCode"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitLogin(); } });
+      });
+      $("#logoutBtn").addEventListener("click", async () => { try { await call("leetcode/logout", {}); } catch {} location.reload(); });
+      $("#refreshBtn").addEventListener("click", () => loadProblems(true));
+      $("#moreBtn").addEventListener("click", () => loadProblems(false));
+      $("#search").addEventListener("change", () => loadProblems(true));
+      $("#difficulty").addEventListener("change", () => loadProblems(true));
+
+      window.dbxPlugin.ready.then(async () => {
+        try {
+          const s = await call("leetcode/status", {});
+          if (s && s.authenticated) { $("#login").classList.add("hidden"); $("#who").textContent = "已登录：" + (s.username || ""); await loadProblems(true); }
+        } catch (e) { /* stay on login screen */ }
+      });
+    </script>
+  </body>
+</html>

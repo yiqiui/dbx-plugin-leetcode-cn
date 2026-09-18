@@ -94,6 +94,21 @@
             <option value="MEDIUM">中等</option>
             <option value="HARD">困难</option>
           </select>
+          <select id="tag">
+            <option value="">全部标签</option>
+            <option value="array">数组</option>
+            <option value="string">字符串</option>
+            <option value="hash-table">哈希表</option>
+            <option value="dynamic-programming">动态规划</option>
+            <option value="tree">树</option>
+            <option value="graph">图</option>
+            <option value="sorting">排序</option>
+            <option value="binary-search">二分查找</option>
+            <option value="linked-list">链表</option>
+            <option value="stack">栈</option>
+            <option value="two-pointers">双指针</option>
+            <option value="sliding-window">滑动窗口</option>
+          </select>
         </div>
         <div id="listStatus" class="status muted">未登录</div>
         <table id="qtable" class="hidden">
@@ -121,10 +136,14 @@
 
       function renderList() {
         const body = $("#qbody");
-        body.innerHTML = state.questions.map((q) => `
+        const kw = $("#search").value.trim().toLowerCase();
+        const shown = kw
+          ? state.questions.filter((q) => (String(q.titleCn || "") + String(q.title || "") + String(q.frontendQuestionId || "")).toLowerCase().includes(kw))
+          : state.questions;
+        body.innerHTML = shown.map((q) => `
           <tr class="q ${q.titleSlug === state.activeSlug ? "active" : ""}" data-slug="${esc(q.titleSlug)}">
-            <td>${q.ac ? '<span class="ac">✓</span>' : ""}</td>
-            <td class="title">[${q.frontendQuestionId}] ${esc(q.title || q.titleCn || q.titleSlug)}</td>
+            <td>${q.status === "AC" ? '<span class="ac">✓</span>' : ""}</td>
+            <td class="title">[${q.frontendQuestionId}] ${esc(q.titleCn || q.title || q.titleSlug)}</td>
             <td>${q.acRate != null ? (q.acRate * 100).toFixed(1) + "%" : "-"}</td>
             <td class="${diffClass(q.difficulty)}">${esc(q.difficulty || "")}</td>
           </tr>`).join("");
@@ -140,8 +159,7 @@
         try {
           const filters = {};
           if ($("#difficulty").value) filters.difficulty = $("#difficulty").value;
-          const search = $("#search").value.trim();
-          if (search) filters.search = search;
+          if ($("#tag").value) filters.tags = [$("#tag").value];
           const data = await call("leetcode/list_problems", { skip: state.skip, limit: state.limit, filters });
           state.questions = state.questions.concat(data.questions || []);
           state.total = data.total || state.questions.length;
@@ -289,8 +307,9 @@
       $("#logoutBtn").addEventListener("click", async () => { try { await call("leetcode/logout", {}); } catch {} location.reload(); });
       $("#refreshBtn").addEventListener("click", () => loadProblems(true));
       $("#moreBtn").addEventListener("click", () => loadProblems(false));
-      $("#search").addEventListener("change", () => loadProblems(true));
+      $("#search").addEventListener("input", () => renderList());
       $("#difficulty").addEventListener("change", () => loadProblems(true));
+      $("#tag").addEventListener("change", () => loadProblems(true));
 
       window.dbxPlugin.ready.then(async () => {
         try {

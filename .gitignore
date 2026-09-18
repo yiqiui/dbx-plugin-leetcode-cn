@@ -2,3 +2,5 @@ backend/target/
 bin/
 .dbx-dev/
 .artifact.json
+
+backend/Cargo.lock

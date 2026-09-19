@@ -37,6 +37,11 @@
       .content { line-height: 1.7; }
       .content pre, .content code { background: color-mix(in srgb, CanvasText 8%, transparent); border-radius: 6px; padding: 1px 5px; }
       .content pre { padding: 10px; overflow: auto; }
+      .content img { max-width: 100%; height: auto; }
+      .content table { border-collapse: collapse; margin: 8px 0; }
+      .content td, .content th { border: 1px solid var(--border); padding: 4px 8px; }
+      .content p { margin: 8px 0; }
+      .stats { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
       .editor { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
       textarea.code { width: 100%; min-height: 260px; font-family: ui-monospace, Consolas, monospace; resize: vertical; }
       .result { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; white-space: pre-wrap; font-family: ui-monospace, Consolas, monospace; }
@@ -179,15 +184,18 @@
           const d = await call("leetcode/get_problem", { titleSlug: slug });
           state.snippets = d.codeSnippets || [];
           const langs = state.snippets.map((s) => `<option value="${esc(s.langSlug)}">${esc(s.lang)}</option>`).join("");
+          let stats = "";
+          try { const st = JSON.parse(d.stats || "{}"); if (st.acRate) stats = `通过率 ${st.acRate} · AC ${st.totalAccepted || "?"} / 提交 ${st.totalSubmission || "?"}`; } catch { /* stats optional */ }
           $("#detailPane").innerHTML = `
             <h2>${d.frontendQuestionId}. ${esc(d.titleCn || d.title || slug)} <span class="${diffClass(d.difficulty)}" style="font-size:13px">${esc(d.difficulty || "")}</span></h2>
+            ${stats ? `<div class="stats">${esc(stats)}</div>` : ""}
             <div class="content">${d.content || ""}</div>
             <div class="editor">
               <div class="row">
                 <select id="lang">${langs}</select>
                 <button id="runBtn" type="button">运行</button>
                 <button id="submitBtn" class="primary" type="button">提交</button>
-                <button id="favBtn" type="button">${d.userStatus === "AC" || d.isFavor ? "★ 已收藏" : "☆ 收藏"}</button>
+                <button id="favBtn" type="button">☆ 收藏</button>
                 <button id="histBtn" type="button">提交历史</button>
                 <span class="muted" id="editorHint"></span>
               </div>
@@ -197,14 +205,19 @@
             </div>`;
           $("#favBtn").addEventListener("click", async () => {
             const b = $("#favBtn"); b.disabled = true;
-            try { await call("leetcode/toggle_favorite", { titleSlug: slug, favorite: true }, 30000); b.textContent = "★ 已收藏"; $("#editorHint").textContent = "已收藏（未验证接口，若无效请告知）"; }
-            catch (e) { $("#editorHint").textContent = "收藏失败：" + e.message; }
+            try { await call("leetcode/toggle_favorite", { titleSlug: slug, favorite: true }, 30000); b.textContent = "★ 已收藏"; }
+            catch (e) { $("#editorHint").textContent = "收藏失败（需登录）：" + e.message; }
             finally { b.disabled = false; }
           });
           $("#histBtn").addEventListener("click", async () => {
             const box = $("#history"); box.classList.remove("hidden"); box.textContent = "加载提交历史…";
-            try { const h = await call("leetcode/submission_list", { titleSlug: slug }, 30000); box.textContent = JSON.stringify(h, null, 2).slice(0, 2000); }
-            catch (e) { box.textContent = "提交历史加载失败（未验证接口）：" + e.message; }
+            try {
+              const h = await call("leetcode/submission_list", { titleSlug: slug }, 30000);
+              const subs = (h && h.submissions) || [];
+              box.textContent = subs.length
+                ? subs.map((s) => `#${s.id}  ${s.lang}  status=${s.status}  ${s.runtime || "-"} / ${s.memory || "-"}  ${s.timestamp ? new Date((s.timestamp | 0) * 1000).toLocaleString() : ""}`).join("\n")
+                : "（无提交记录或需登录）";
+            } catch (e) { box.textContent = "提交历史加载失败（需登录）：" + e.message; }
           });
           const fillSnippet = () => {
             const slugVal = $("#lang").value;

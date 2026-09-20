@@ -313,47 +313,21 @@
         } finally { $("#autoCookieBtn").disabled = false; }
       }
 
-      let oneClickTimer = null;
       async function doOneClickLogin() {
         const hint = () => $("#oneClickHint");
         $("#oneClickLoginBtn").disabled = true;
         $("#loginMsg").textContent = "";
+        hint().textContent = "正在打开一个受控的浏览器窗口到力扣官方登录页……请在弹出的窗口里用手机号 / 验证码或账号密码完成登录（含滑块）。登录成功后插件会自动取回登录态，无需你粘贴 Cookie。";
         try {
-          await call("leetcode/open_login_browser", {}, 15000);
+          const r = await call("leetcode/browser_login_capture", {}, 255000);
+          hint().textContent = "";
+          await afterLogin(r, r.browser || "浏览器登录");
         } catch (e) {
-          $("#loginMsg").textContent = "打开浏览器失败：" + e.message + "。请手动打开 https://leetcode.cn 登录后，点下方「立即导入 Cookie」。";
-          $("#oneClickLoginBtn").disabled = false;
-          return;
-        }
-        hint().textContent = "已在系统浏览器打开力扣登录页，请在浏览器里用账号密码 / 验证码完成登录（含滑块）。登录成功后我会自动检测并导入，无需你粘贴 Cookie…";
-        const started = Date.now();
-        const deadline = started + 180000; // 3 分钟
-        let firstFailureNoted = false;
-        const tick = async () => {
-          try {
-            const r = await call("leetcode/login_auto", {}, 45000);
-            stopOneClick();
             hint().textContent = "";
-            await afterLogin(r, r.browser || "cookie");
-            return;
-          } catch (e) {
-            if (!firstFailureNoted && Date.now() - started > 8000) {
-              firstFailureNoted = true;
-              hint().textContent = "还没检测到登录态（Chrome/Edge 运行中会锁定 Cookie 无法读取）。请继续：① 完成浏览器登录后重试；② 完全退出 Chrome/Edge 后自动读取；③ 或改用 Firefox 登录（可即时读取）。";
-            }
-            if (Date.now() > deadline) {
-              stopOneClick();
-              hint().textContent = "自动检测已停止。可点「立即导入 Cookie」再试，或用下方高级手动粘贴。";
-              return;
-            }
-            oneClickTimer = setTimeout(tick, 4000);
-          }
-        };
-        oneClickTimer = setTimeout(tick, 4000);
-      }
-      function stopOneClick() {
-        if (oneClickTimer) { clearTimeout(oneClickTimer); oneClickTimer = null; }
-        const b = $("#oneClickLoginBtn"); if (b) b.disabled = false;
+            $("#loginMsg").textContent = "浏览器登录未完成：" + e.message + "（也可用下方『立即导入 Cookie』或『手动粘贴 Cookie』）。";
+        } finally {
+          $("#oneClickLoginBtn").disabled = false;
+        }
       }
 
       function submitLogin() {

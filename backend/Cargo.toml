@@ -1,6 +1,6 @@
 [package]
 name = "dbx-leetcode-cn"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 license = "Apache-2.0"
 
@@ -14,6 +14,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 aes-gcm = "0.10"
 sha2 = "0.10"
 base64 = "0.22"
+tungstenite = { version = "0.24", default-features = false, features = ["handshake"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_Storage_FileSystem", "Win32_System_IO"] }

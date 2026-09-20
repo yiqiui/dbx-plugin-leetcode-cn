@@ -65,20 +65,24 @@
           <button type="button" class="mode-tab" data-mode="code">验证码登录</button>
           <button type="button" class="mode-tab active" data-mode="cookie">浏览器 / Cookie 登录（推荐）</button>
         </div>
-        <div class="muted" style="font-size:12px">力扣登录受极验滑块保护，插件沙箱无法内嵌网页完成验证（这也是 JetBrains 插件对 leetcode.cn 实际依赖 Cookie 的原因）。推荐：在「浏览器 / Cookie 登录」里点①打开系统浏览器登录，②一键导入或③手动粘贴 Cookie。密码/验证码登录仅作兜底，常因风控失败。</div>
+        <div class="muted" style="font-size:12px">力扣登录受极验滑块保护，且 DBX 插件是受限沙箱、无法内嵌浏览器（IDEA 的“直接登录”靠的是它自带的 JCEF 内嵌浏览器，DBX 无此能力）。因此最稳的方式是：在真实浏览器里用账号密码/验证码登录，插件自动把登录态同步进来——你无需手动粘贴 Cookie。</div>
         <input id="loginUser" class="hidden" autocomplete="username" placeholder="用户名 / 邮箱 / 手机号" />
         <div id="pwdRow" class="hidden"><input id="loginPass" type="password" autocomplete="current-password" placeholder="密码" /></div>
         <div id="codeRow" class="hidden">
           <div class="row"><input id="loginCode" placeholder="验证码" style="flex:1" /><button type="button" id="sendCodeBtn">发送验证码</button></div>
         </div>
         <div id="cookieRow">
-          <button type="button" id="browserLoginBtn" class="primary" style="width:100%">① 打开系统浏览器登录力扣（真实浏览器可正常通过极验滑块）</button>
-          <button type="button" id="autoCookieBtn" style="width:100%">② 登录完成后：一键导入本机浏览器 Cookie（Chrome/Edge/Firefox）</button>
-          <input id="cookieSession" placeholder="③ 或手动粘贴 LEETCODE_SESSION（导入失败时）" />
-          <input id="cookieCsrf" placeholder="csrftoken（可留空）" />
+          <button type="button" id="oneClickLoginBtn" class="primary" style="width:100%">用浏览器登录并自动导入（推荐，免粘贴）</button>
+          <div class="muted" id="oneClickHint" style="font-size:12px;min-height:16px"></div>
+          <button type="button" id="autoCookieBtn" style="width:100%">我已在本机浏览器登录过，立即导入 Cookie</button>
+          <details style="margin-top:6px">
+            <summary class="muted" style="font-size:12px;cursor:pointer">高级：手动粘贴 Cookie（自动导入失败时，如 Chrome/Edge 运行中）</summary>
+            <input id="cookieSession" placeholder="LEETCODE_SESSION" style="margin-top:6px" />
+            <input id="cookieCsrf" placeholder="csrftoken（可留空）" />
+          </details>
         </div>
         <div id="loginMsg" class="muted"></div>
-        <button class="primary" id="loginBtn" type="button">登录</button>
+        <button class="primary hidden" id="loginBtn" type="button">登录</button>
       </div>
     </div>
 
@@ -309,14 +313,47 @@
         } finally { $("#autoCookieBtn").disabled = false; }
       }
 
-      async function doBrowserLogin() {
-        $("#browserLoginBtn").disabled = true; $("#loginMsg").textContent = "正在打开系统浏览器…";
+      let oneClickTimer = null;
+      async function doOneClickLogin() {
+        const hint = () => $("#oneClickHint");
+        $("#oneClickLoginBtn").disabled = true;
+        $("#loginMsg").textContent = "";
         try {
           await call("leetcode/open_login_browser", {}, 15000);
-          $("#loginMsg").textContent = "已在系统浏览器打开力扣登录页。请在浏览器中完成登录（含滑块），随后回到这里点②一键导入；若浏览器正在运行导致导入失败，请完全退出浏览器后重试，或改用③手动粘贴 Cookie。";
         } catch (e) {
-          $("#loginMsg").textContent = "打开浏览器失败：" + e.message;
-        } finally { $("#browserLoginBtn").disabled = false; }
+          $("#loginMsg").textContent = "打开浏览器失败：" + e.message + "。请手动打开 https://leetcode.cn 登录后，点下方「立即导入 Cookie」。";
+          $("#oneClickLoginBtn").disabled = false;
+          return;
+        }
+        hint().textContent = "已在系统浏览器打开力扣登录页，请在浏览器里用账号密码 / 验证码完成登录（含滑块）。登录成功后我会自动检测并导入，无需你粘贴 Cookie…";
+        const started = Date.now();
+        const deadline = started + 180000; // 3 分钟
+        let firstFailureNoted = false;
+        const tick = async () => {
+          try {
+            const r = await call("leetcode/login_auto", {}, 45000);
+            stopOneClick();
+            hint().textContent = "";
+            await afterLogin(r, r.browser || "cookie");
+            return;
+          } catch (e) {
+            if (!firstFailureNoted && Date.now() - started > 8000) {
+              firstFailureNoted = true;
+              hint().textContent = "还没检测到登录态（Chrome/Edge 运行中会锁定 Cookie 无法读取）。请继续：① 完成浏览器登录后重试；② 完全退出 Chrome/Edge 后自动读取；③ 或改用 Firefox 登录（可即时读取）。";
+            }
+            if (Date.now() > deadline) {
+              stopOneClick();
+              hint().textContent = "自动检测已停止。可点「立即导入 Cookie」再试，或用下方高级手动粘贴。";
+              return;
+            }
+            oneClickTimer = setTimeout(tick, 4000);
+          }
+        };
+        oneClickTimer = setTimeout(tick, 4000);
+      }
+      function stopOneClick() {
+        if (oneClickTimer) { clearTimeout(oneClickTimer); oneClickTimer = null; }
+        const b = $("#oneClickLoginBtn"); if (b) b.disabled = false;
       }
 
       function submitLogin() {
@@ -333,12 +370,13 @@
         $("#codeRow").classList.toggle("hidden", loginMode !== "code");
         $("#cookieRow").classList.toggle("hidden", loginMode !== "cookie");
         $("#loginUser").classList.toggle("hidden", loginMode === "cookie");
+        $("#loginBtn").classList.toggle("hidden", loginMode === "cookie");
         $("#loginMsg").textContent = "";
       }));
       $("#loginBtn").addEventListener("click", submitLogin);
       $("#sendCodeBtn").addEventListener("click", sendCode);
       $("#autoCookieBtn").addEventListener("click", doAutoLogin);
-      $("#browserLoginBtn").addEventListener("click", doBrowserLogin);
+      $("#oneClickLoginBtn").addEventListener("click", doOneClickLogin);
       ["loginUser", "loginPass", "loginCode"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitLogin(); } });

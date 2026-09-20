@@ -51,7 +51,13 @@
       .code-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       .code-bar select { min-width: 120px; }
       .code-bar .spacer { flex: 1; }
-      textarea.code { flex: 1; min-height: 220px; width: 100%; font-family: ui-monospace, Consolas, monospace; resize: none; }
+      .editor-wrap { flex: 1; min-height: 0; display: flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: color-mix(in srgb, CanvasText 4%, transparent); }
+      .gutter { padding: 8px 6px; text-align: right; color: var(--muted); border-right: 1px solid var(--border); background: color-mix(in srgb, CanvasText 3%, transparent); user-select: none; overflow: hidden; }
+      .gutter, .hl, #code { font-family: ui-monospace, Consolas, monospace; font-size: 13px; line-height: 1.5; tab-size: 4; white-space: pre; }
+      .editor-scroll { position: relative; flex: 1; min-width: 0; }
+      .hl { position: absolute; inset: 0; margin: 0; padding: 8px; overflow: hidden; pointer-events: none; color: CanvasText; }
+      #code { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 8px; border: 0; outline: none; background: transparent; color: transparent; caret-color: CanvasText; resize: none; overflow: auto; }
+      .tk-kw { color: #c678dd; } .tk-str { color: #98c379; } .tk-com { color: #7f848e; font-style: italic; } .tk-num { color: #d19a66; } .tk-fn { color: #61afef; } .tk-type { color: #e5c07b; }
       .content { line-height: 1.7; }
       .content pre, .content code { background: color-mix(in srgb, CanvasText 8%, transparent); border-radius: 6px; padding: 1px 5px; }
       .content pre { padding: 10px; overflow: auto; }
@@ -211,37 +217,131 @@
         } finally { state.loading = false; }
       }
 
+      const KW = {
+        clike: "auto bool break case catch char class const continue default delete do double else enum export extends false final finally float for func function goto if implements import in instanceof int interface let long native new null of package private protected public return short static struct super switch synchronized this throw throws true try type typedef union unsigned var void while yield async await",
+        python: "and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield True False None self",
+        ruby: "alias and begin break case class def defined do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield",
+        bash: "if then else elif fi for while until do done case esac function return break continue export local readonly source echo",
+        sql: "select from where insert into values update delete create table alter drop database add column primary key foreign references unique index view join inner left right outer full cross on group by order having limit offset asc desc as and or not null distinct union all like in between exists case when then else end",
+        go: "break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var nil true false iota make len append cap new",
+        rust: "as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self super trait true type unsafe use where while Some None Ok Err Vec",
+        java: "abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try var void volatile while true false null",
+        kotlin: "as break by catch class companion const continue crossinline data do else enum external false finally for fun get if import in infix init inline interface internal is lateinit noinline null object operator out override package private protected public reified return sealed set super suspend this throw true try typealias val var when where while",
+        swift: "associatedtype break case catch class continue default defer do else enum extension fallthrough false fileprivate for func guard if import in indirect infix init inout internal is lazy let mutating nil operator private protocol public repeat required return self static struct subscript super switch throw throws true try typealias var weak where while",
+        php: "abstract and array as break callable case catch class clone const continue declare default do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile extends final finally fn for foreach function global goto if implements include instanceof insteadof interface isset list match namespace new or print private protected public readonly require return static switch throw trait try unset use var while xor yield true false null",
+        csharp: "abstract as base bool break byte case catch char checked class const continue decimal default delegate do double else enum event explicit extern false finally fixed float for foreach goto if implicit in int interface internal is lock long namespace new null object operator out override params private protected public readonly ref return sbyte sealed short sizeof stackalloc static string struct switch this throw true try typeof uint ulong unchecked unsafe ushort using virtual volatile void var async await",
+        javascript: "async await break case catch class const continue debugger default delete do else export extends finally for from function get if import in instanceof let new return set super switch this throw try typeof var void while with yield true false null undefined",
+      };
+      const kwset = (s) => new Set(s.split(/\s+/));
+      function langConfig(slug) {
+        slug = String(slug || "").toLowerCase();
+        if (slug.startsWith("python") || slug === "pypy") return { kw: kwset(KW.python), line: "#", block: null };
+        if (slug === "ruby") return { kw: kwset(KW.ruby), line: "#", block: ["=begin", "=end"] };
+        if (slug === "bash" || slug === "shell") return { kw: kwset(KW.bash), line: "#", block: null };
+        if (slug.includes("sql")) return { kw: kwset(KW.sql + " " + KW.sql.toUpperCase()), line: "--", block: ["/*", "*/"] };
+        if (slug === "go" || slug === "golang") return { kw: kwset(KW.go), line: "//", block: ["/*", "*/"] };
+        if (slug === "rust") return { kw: kwset(KW.rust), line: "//", block: ["/*", "*/"] };
+        if (slug === "java") return { kw: kwset(KW.java), line: "//", block: ["/*", "*/"] };
+        if (slug === "kotlin") return { kw: kwset(KW.kotlin), line: "//", block: ["/*", "*/"] };
+        if (slug === "swift") return { kw: kwset(KW.swift), line: "//", block: ["/*", "*/"] };
+        if (slug === "php") return { kw: kwset(KW.php), line: "//", block: ["/*", "*/"] };
+        if (slug === "csharp") return { kw: kwset(KW.csharp), line: "//", block: ["/*", "*/"] };
+        if (slug === "javascript" || slug === "typescript" || slug === "angular" || slug === "vue") return { kw: kwset(KW.javascript), line: "//", block: ["/*", "*/"] };
+        return { kw: kwset(KW.clike), line: "//", block: ["/*", "*/"] };
+      }
+      function highlight(code, slug) {
+        const cfg = langConfig(slug); const kw = cfg.kw; const n = code.length; let out = ""; let i = 0;
+        while (i < n) {
+          const c = code[i];
+          if (cfg.line && code.startsWith(cfg.line, i)) { let j = code.indexOf("\n", i); if (j < 0) j = n; out += `<span class="tk-com">${esc(code.slice(i, j))}</span>`; i = j; continue; }
+          if (cfg.block && code.startsWith(cfg.block[0], i)) { let j = code.indexOf(cfg.block[1], i + cfg.block[0].length); j = j < 0 ? n : j + cfg.block[1].length; out += `<span class="tk-com">${esc(code.slice(i, j))}</span>`; i = j; continue; }
+          if (c === '"' || c === "'" || c === "`") { let j = i + 1; while (j < n) { if (code[j] === "\\") { j += 2; continue; } if (code[j] === c) { j++; break; } j++; } out += `<span class="tk-str">${esc(code.slice(i, j))}</span>`; i = j; continue; }
+          if (c >= "0" && c <= "9") { let j = i; while (j < n && /[0-9a-fA-FxX._]/.test(code[j])) j++; out += `<span class="tk-num">${esc(code.slice(i, j))}</span>`; i = j; continue; }
+          if (/[A-Za-z_$]/.test(c)) { let j = i; while (j < n && /[A-Za-z0-9_$]/.test(code[j])) j++; const w = code.slice(i, j); out += kw.has(w) ? `<span class="tk-kw">${esc(w)}</span>` : esc(w); i = j; continue; }
+          out += esc(c); i++;
+        }
+        return out;
+      }
+
+      function editorHtml(langs) {
+        return `
+          <div class="code-bar">
+            <select id="lang">${langs}</select>
+            <button id="runBtn" type="button">运行</button>
+            <button id="submitBtn" class="primary" type="button">提交</button>
+            <span class="spacer"></span>
+            <button id="favBtn" type="button">☆ 收藏</button>
+            <button id="histBtn" type="button">提交历史</button>
+          </div>
+          <div class="editor-wrap">
+            <div class="gutter" id="gutter">1</div>
+            <div class="editor-scroll">
+              <pre class="hl" id="hl"></pre>
+              <textarea class="code" id="code" spellcheck="false" wrap="off"></textarea>
+            </div>
+          </div>
+          <div id="result" class="result hidden"></div>
+          <div id="history" class="result hidden"></div>
+          <span class="muted" id="editorHint"></span>`;
+      }
+      function fillSnippet() {
+        const snip = state.snippets.find((s) => s.langSlug === $("#lang").value);
+        $("#code").value = snip ? snip.code : "";
+      }
+      function wireEditor() {
+        const code = $("#code"), hl = $("#hl"), gutter = $("#gutter"), lang = $("#lang");
+        const syncScroll = () => { hl.scrollTop = code.scrollTop; hl.scrollLeft = code.scrollLeft; gutter.scrollTop = code.scrollTop; };
+        const update = () => {
+          const v = code.value;
+          hl.innerHTML = highlight(v, lang.value) + "\n";
+          let g = ""; const lines = v.split("\n").length;
+          for (let k = 1; k <= lines; k++) g += k + "\n";
+          gutter.textContent = g;
+          syncScroll();
+        };
+        code.addEventListener("input", update);
+        code.addEventListener("scroll", syncScroll);
+        lang.addEventListener("change", () => { fillSnippet(); update(); });
+        code.addEventListener("keydown", (e) => {
+          if (e.key === "Tab") { e.preventDefault(); const s = code.selectionStart, en = code.selectionEnd; code.value = code.value.slice(0, s) + "    " + code.value.slice(en); code.selectionStart = code.selectionEnd = s + 4; update(); }
+          else if (e.key === "Enter") {
+            const s = code.selectionStart; const before = code.value.slice(0, s); const ls = before.lastIndexOf("\n") + 1;
+            const indent = (before.slice(ls).match(/^[ \t]*/) || [""])[0]; const extra = /[{([:]\s*$/.test(before) ? "    " : "";
+            if (indent || extra) { e.preventDefault(); const ins = "\n" + indent + extra; code.value = code.value.slice(0, s) + ins + code.value.slice(code.selectionEnd); code.selectionStart = code.selectionEnd = s + ins.length; update(); }
+          }
+        });
+        window.__updateEditor = update;
+        update();
+      }
+
       async function openProblem(slug) {
         state.activeSlug = slug;
         showSolve();
         $("#solveTitle").textContent = "题目加载中…";
         $("#descPane").innerHTML = '<div class="muted">题面加载中…</div>';
         $("#editorPane").innerHTML = '<div class="muted">加载代码编辑器…</div>';
+        const retry = () => { const rb = $("#retryBtn"); if (rb) rb.addEventListener("click", () => openProblem(slug)); };
         try {
           const d = await call("leetcode/get_problem", { titleSlug: slug });
-          state.snippets = d.codeSnippets || [];
-          const langs = state.snippets.map((s) => `<option value="${esc(s.langSlug)}">${esc(s.lang)}</option>`).join("");
-          let stats = "";
-          try { const st = JSON.parse(d.stats || "{}"); if (st.acRate) stats = `通过率 ${st.acRate} · AC ${st.totalAccepted || "?"} / 提交 ${st.totalSubmission || "?"}`; } catch { /* stats optional */ }
           const title = `${d.frontendQuestionId}. ${esc(d.titleCn || d.title || slug)}`;
           $("#solveTitle").textContent = title;
-          $("#descPane").innerHTML = `
-            <h2>${title} <span class="${diffClass(d.difficulty)}" style="font-size:13px">${esc(d.difficulty || "")}</span></h2>
-            ${stats ? `<div class="stats">${esc(stats)}</div>` : ""}
-            <div class="content">${d.content || ""}</div>`;
-          $("#editorPane").innerHTML = `
-            <div class="code-bar">
-              <select id="lang">${langs}</select>
-              <button id="runBtn" type="button">运行</button>
-              <button id="submitBtn" class="primary" type="button">提交</button>
-              <span class="spacer"></span>
-              <button id="favBtn" type="button">☆ 收藏</button>
-              <button id="histBtn" type="button">提交历史</button>
-            </div>
-            <textarea class="code" id="code" spellcheck="false"></textarea>
-            <div id="result" class="result hidden"></div>
-            <div id="history" class="result hidden"></div>
-            <span class="muted" id="editorHint"></span>`;
+          let stats = "";
+          try { const st = JSON.parse(d.stats || "{}"); if (st.acRate) stats = `通过率 ${st.acRate} · AC ${st.totalAccepted || "?"} / 提交 ${st.totalSubmission || "?"}`; } catch { /* stats optional */ }
+          const head = `<h2>${title} <span class="${diffClass(d.difficulty)}" style="font-size:13px">${esc(d.difficulty || "")}</span></h2>${stats ? `<div class="stats">${esc(stats)}</div>` : ""}`;
+          const snippets = d.codeSnippets || [];
+          if (d.isPaidOnly || (!d.content && snippets.length === 0)) {
+            const reason = d.isPaidOnly ? "该题是力扣会员（付费）题目，未开通会员时无法获取题面与代码模板" : "未获取到题面或代码模板（可能是接口偶发返回空）";
+            $("#descPane").innerHTML = `${head}<div class="result bad">${esc(reason)}。<div style="margin-top:10px"><button id="retryBtn" type="button">重试</button></div></div>`;
+            $("#editorPane").innerHTML = '<div class="muted">此题暂不可作答。</div>';
+            retry();
+            return;
+          }
+          state.snippets = snippets;
+          const langs = snippets.map((s) => `<option value="${esc(s.langSlug)}">${esc(s.lang)}</option>`).join("");
+          $("#descPane").innerHTML = `${head}<div class="content">${d.content || ""}</div>`;
+          $("#editorPane").innerHTML = editorHtml(langs);
+          wireEditor();
+          fillSnippet(); if (window.__updateEditor) window.__updateEditor();
           $("#favBtn").addEventListener("click", async () => {
             const b = $("#favBtn"); b.disabled = true;
             try { await call("leetcode/toggle_favorite", { titleSlug: slug, favorite: true }, 30000); b.textContent = "★ 已收藏"; }
@@ -258,17 +358,12 @@
                 : "（无提交记录或需登录）";
             } catch (e) { box.textContent = "提交历史加载失败（需登录）：" + e.message; }
           });
-          const fillSnippet = () => {
-            const slugVal = $("#lang").value;
-            const snip = state.snippets.find((s) => s.langSlug === slugVal);
-            $("#code").value = snip ? snip.code : "";
-          };
-          $("#lang").addEventListener("change", fillSnippet);
-          fillSnippet();
           $("#runBtn").addEventListener("click", () => judge("run"));
           $("#submitBtn").addEventListener("click", () => judge("submit"));
         } catch (e) {
-          $("#descPane").innerHTML = '<div class="result bad">题面加载失败：' + esc(e.message) + "</div>";
+          $("#descPane").innerHTML = `<div class="result bad">题面加载失败：${esc(e.message)}<div style="margin-top:10px"><button id="retryBtn" type="button">重试</button></div></div>`;
+          $("#editorPane").innerHTML = '<div class="muted">加载失败，请点“重试”。</div>';
+          retry();
         }
       }
 

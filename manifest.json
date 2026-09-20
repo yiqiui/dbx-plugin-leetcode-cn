@@ -4,7 +4,7 @@
   "id": "com.yiqiui.leetcode-cn",
   "name": "LeetCode 刷题",
   "icon": "assets/plugin.svg",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "yiqiui",
   "description": "在 DBX 插件中心登录力扣（leetcode.cn）账号，浏览题库、查看题面、选择语言编写代码并运行 / 提交判题。",
   "source": "https://github.com/yiqiui/dbx-plugin-leetcode-cn",

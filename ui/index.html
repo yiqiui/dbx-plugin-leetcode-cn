@@ -61,19 +61,20 @@
       <div class="card">
         <div class="brand" style="font-size:18px;font-weight:800;color:var(--brand)">LeetCode 登录</div>
         <div class="mode-tabs">
-          <button type="button" class="mode-tab active" data-mode="password">密码登录</button>
+          <button type="button" class="mode-tab" data-mode="password">密码登录</button>
           <button type="button" class="mode-tab" data-mode="code">验证码登录</button>
-          <button type="button" class="mode-tab" data-mode="cookie">Cookie 登录</button>
+          <button type="button" class="mode-tab active" data-mode="cookie">浏览器 / Cookie 登录（推荐）</button>
         </div>
-        <div class="muted" style="font-size:12px">凭据仅用于本次会话的登录请求。密码/验证码登录可能受 leetcode.cn 极验/风控限制；Cookie 登录最稳。</div>
-        <input id="loginUser" autocomplete="username" placeholder="用户名 / 邮箱 / 手机号" />
-        <div id="pwdRow"><input id="loginPass" type="password" autocomplete="current-password" placeholder="密码" /></div>
+        <div class="muted" style="font-size:12px">力扣登录受极验滑块保护，插件沙箱无法内嵌网页完成验证（这也是 JetBrains 插件对 leetcode.cn 实际依赖 Cookie 的原因）。推荐：在「浏览器 / Cookie 登录」里点①打开系统浏览器登录，②一键导入或③手动粘贴 Cookie。密码/验证码登录仅作兜底，常因风控失败。</div>
+        <input id="loginUser" class="hidden" autocomplete="username" placeholder="用户名 / 邮箱 / 手机号" />
+        <div id="pwdRow" class="hidden"><input id="loginPass" type="password" autocomplete="current-password" placeholder="密码" /></div>
         <div id="codeRow" class="hidden">
           <div class="row"><input id="loginCode" placeholder="验证码" style="flex:1" /><button type="button" id="sendCodeBtn">发送验证码</button></div>
         </div>
-        <div id="cookieRow" class="hidden">
-          <button type="button" id="autoCookieBtn" style="width:100%">一键登录：读取本机浏览器 Cookie（需已在 Chrome/Edge/Firefox 登录 leetcode.cn）</button>
-          <input id="cookieSession" placeholder="LEETCODE_SESSION（自动读取失败时可手动粘贴）" />
+        <div id="cookieRow">
+          <button type="button" id="browserLoginBtn" class="primary" style="width:100%">① 打开系统浏览器登录力扣（真实浏览器可正常通过极验滑块）</button>
+          <button type="button" id="autoCookieBtn" style="width:100%">② 登录完成后：一键导入本机浏览器 Cookie（Chrome/Edge/Firefox）</button>
+          <input id="cookieSession" placeholder="③ 或手动粘贴 LEETCODE_SESSION（导入失败时）" />
           <input id="cookieCsrf" placeholder="csrftoken（可留空）" />
         </div>
         <div id="loginMsg" class="muted"></div>
@@ -257,7 +258,7 @@
         } finally { btn.disabled = false; }
       }
 
-      let loginMode = "password";
+      let loginMode = "cookie";
 
       function afterLogin(r, label) {
         $("#login").classList.add("hidden");
@@ -308,6 +309,16 @@
         } finally { $("#autoCookieBtn").disabled = false; }
       }
 
+      async function doBrowserLogin() {
+        $("#browserLoginBtn").disabled = true; $("#loginMsg").textContent = "正在打开系统浏览器…";
+        try {
+          await call("leetcode/open_login_browser", {}, 15000);
+          $("#loginMsg").textContent = "已在系统浏览器打开力扣登录页。请在浏览器中完成登录（含滑块），随后回到这里点②一键导入；若浏览器正在运行导致导入失败，请完全退出浏览器后重试，或改用③手动粘贴 Cookie。";
+        } catch (e) {
+          $("#loginMsg").textContent = "打开浏览器失败：" + e.message;
+        } finally { $("#browserLoginBtn").disabled = false; }
+      }
+
       function submitLogin() {
         const user = $("#loginUser").value.trim();
         if (loginMode === "password") doLogin(user, $("#loginPass").value);
@@ -327,6 +338,7 @@
       $("#loginBtn").addEventListener("click", submitLogin);
       $("#sendCodeBtn").addEventListener("click", sendCode);
       $("#autoCookieBtn").addEventListener("click", doAutoLogin);
+      $("#browserLoginBtn").addEventListener("click", doBrowserLogin);
       ["loginUser", "loginPass", "loginCode"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); submitLogin(); } });

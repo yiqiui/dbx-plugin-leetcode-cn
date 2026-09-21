@@ -423,12 +423,17 @@
         const tick = async () => {
           let r;
           try {
-            r = await call("leetcode/browser_login_poll", {}, 15000);
+            r = await call("leetcode/browser_login_poll", {}, 28000);
           } catch (e) {
-            hint().textContent = "";
-            $("#loginMsg").textContent = "登录检测中断：" + e.message;
-            $("#oneClickLoginBtn").disabled = false;
-            stopOneClickPoll();
+            // 单次轮询超时/异常视为瞬时问题，继续轮询直到总超时
+            hint().textContent = "登录检测中（网络较慢或需代理，重试中）…";
+            if (Date.now() - started > 310000) {
+              stopOneClickPoll();
+              $("#oneClickLoginBtn").disabled = false;
+              $("#loginMsg").textContent = "登录检测中断：" + e.message + "（可改用『手动粘贴 Cookie』）。";
+              return;
+            }
+            oneClickTimer = setTimeout(tick, 3000);
             return;
           }
           if (r && r.username) {

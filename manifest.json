@@ -4,7 +4,7 @@
   "id": "com.yiqiui.leetcode-cn",
   "name": "LeetCode 刷题",
   "icon": "assets/plugin.svg",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "yiqiui",
   "description": "在 DBX 插件中心登录力扣（leetcode.cn）账号，浏览题库、查看题面、选择语言编写代码并运行 / 提交判题。",
   "source": "https://github.com/yiqiui/dbx-plugin-leetcode-cn",
@@ -33,7 +33,7 @@
       "type": "workbench",
       "id": "com.yiqiui.leetcode-cn.workbench",
       "label": "LeetCode 刷题",
-      "description": "力扣题库浏览与在线判题工作台：官方分类页签、79 个标签（含实时题数）、难度/作答状态筛选与服务端搜索。",
+      "description": "力扣题库工作台：官方分类页签、79 个标签（实时题数、可展开多选）、难度/作答状态筛选、排序、随机一题、收藏星标、每日一题与企业题库入口。",
       "icon": "assets/plugin.svg"
     }
   ],

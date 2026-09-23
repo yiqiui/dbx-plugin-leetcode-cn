@@ -50,6 +50,34 @@
       .tags .more { color: var(--brand); font-weight: 650; border-style: dashed; }
       .tags.collapsed { max-height: 30px; overflow: hidden; }
       .active-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+      /* 左侧导航（题目 / 收藏 / 每日一题 + 官网板块入口） */
+      #nav { width: 132px; flex: 0 0 132px; border-right: 1px solid var(--border); padding: 8px 6px; display: flex; flex-direction: column; gap: 2px; overflow: auto; }
+      #nav .nav-item { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: none; color: var(--muted); padding: 7px 9px; border-radius: 8px; font: inherit; text-align: left; cursor: pointer; }
+      #nav .nav-item:hover { background: color-mix(in srgb, CanvasText 7%, transparent); color: inherit; }
+      #nav .nav-item[aria-current="page"] { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); font-weight: 650; }
+      #nav .nav-group { margin-top: 10px; padding: 6px 9px 2px; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
+      #nav .nav-item .ico { width: 16px; text-align: center; }
+      /* 右侧栏（每日一题 / 企业题库） */
+      #rail { width: 232px; flex: 0 0 232px; border-left: 1px solid var(--border); padding: 10px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+      #rail .box { border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+      #rail h4 { margin: 0 0 8px; font-size: 12px; color: var(--muted); font-weight: 700; letter-spacing: .04em; }
+      #rail .daily-q { cursor: pointer; font-weight: 600; line-height: 1.45; }
+      #rail .daily-q:hover { color: var(--brand); }
+      .companies { display: flex; flex-wrap: wrap; gap: 6px; }
+      .companies button { padding: 3px 8px; font-size: 12px; border-radius: 999px; }
+      .sortbar { display: flex; align-items: center; gap: 6px; }
+      .sortbar select { min-width: 104px; }
+      #sortDir { padding: 5px 9px; }
+      .fav { width: 34px; text-align: center; cursor: pointer; font-size: 14px; color: color-mix(in srgb, CanvasText 32%, transparent); }
+      .fav:hover { color: var(--brand); }
+      .fav.on { color: var(--brand); }
+      .avatar { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, #ffc84a, #f08c00); color: #3d2a00; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 20px; }
+      .who { display: inline-flex; align-items: center; gap: 6px; }
+      .tags-wrap { display: flex; align-items: flex-start; gap: 8px; }
+      .tags-scroll { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+      .tags-scroll.clip { max-height: 28px; overflow: hidden; }
+      @media (max-width: 1080px) { #rail { display: none; } }
+      @media (max-width: 820px) { #nav { width: 46px; flex-basis: 46px; } #nav .label, #nav .nav-group { display: none; } #nav .nav-item { justify-content: center; } }
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
       th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: Canvas; }
@@ -109,6 +137,15 @@
     </header>
 
     <main>
+      <aside id="nav" aria-label="板块导航">
+        <button type="button" class="nav-item" data-view="list" data-slug="" aria-current="page"><span class="ico">▤</span><span class="label">题目</span></button>
+        <button type="button" class="nav-item" data-view="favs"><span class="ico">★</span><span class="label">我的收藏</span></button>
+        <button type="button" class="nav-item" data-view="daily"><span class="ico">◉</span><span class="label">每日一题</span></button>
+        <div class="nav-group">官网板块</div>
+        <button type="button" class="nav-item site" data-path="/explore/"><span class="ico">🧭</span><span class="label">探险模式</span></button>
+        <button type="button" class="nav-item site" data-path="/leetbook/"><span class="ico">📘</span><span class="label">LeetBook</span></button>
+        <button type="button" class="nav-item site" data-path="/studyplan/"><span class="ico">🎓</span><span class="label">学习计划</span></button>
+      </aside>
       <section id="listView">
         <nav class="cats" id="cats" role="tablist" aria-label="题目分类"></nav>
         <div class="toolbar">
@@ -127,13 +164,28 @@
               <option value="TRIED">尝试过</option>
             </select>
             <button id="resetBtn" type="button">重置筛选</button>
+            <div class="sortbar">
+              <select id="sortField" title="排序字段">
+                <option value="">默认排序</option>
+                <option value="FRONTEND_ID">题号</option>
+                <option value="DIFFICULTY">难度</option>
+                <option value="AC_RATE">通过率</option>
+                <option value="FREQUENCY">出题频率</option>
+                <option value="CONTEST_POINT">竞赛分</option>
+              </select>
+              <button id="sortDir" type="button" title="切换升 / 降序">↑</button>
+            </div>
+            <button id="randomBtn" type="button" title="从当前筛选结果中随机抽一题">随机一题</button>
           </div>
-          <div class="tags collapsed" id="tags"></div>
+          <div class="tags-wrap">
+            <div class="tags-scroll clip" id="tags"></div>
+            <button type="button" class="tag more" id="tagsToggle" hidden>展开 ▼</button>
+          </div>
         </div>
         <div id="listStatus" class="status muted">未登录</div>
         <div style="flex:1;min-height:0;overflow:auto">
           <table id="qtable" class="hidden">
-            <thead><tr><th></th><th>Title</th><th>AC</th><th>难度</th></tr></thead>
+            <thead><tr><th></th><th>题目</th><th>标签</th><th>通过率</th><th>难度</th><th title="收藏">★</th></tr></thead>
             <tbody id="qbody"></tbody>
           </table>
         </div>
@@ -163,12 +215,24 @@
           <div class="pane code" id="editorPane"></div>
         </div>
       </section>
+
+      <aside id="rail" aria-label="侧栏信息">
+        <div class="box" id="dailyBox">
+          <h4>每日一题</h4>
+          <div class="muted" id="dailyBody">加载中…</div>
+        </div>
+        <div class="box">
+          <h4>热门企业题库</h4>
+          <div class="companies" id="companies"></div>
+        </div>
+      </aside>
     </main>
 
     <script>
       const $ = (sel) => document.querySelector(sel);
       const state = { questions: [], page: 1, pageSize: 30, total: 0, activeSlug: null, snippets: [], loading: false,
-                      categorySlug: "", tags: [], allTags: [], tagsExpanded: false, searching: false };
+                      categorySlug: "", tags: [], allTags: [], tagsExpanded: false, searching: false,
+                      sortField: "", sortDesc: false, onlyFavs: false, fullSet: null, fullSetKey: "", me: null };
       // The official problemset tabs. Slugs are what the site's GraphQL
       // `categorySlug` argument expects (note the singular `database`).
       const CATS = [
@@ -180,6 +244,15 @@
         { slug: "javascript", label: "JavaScript" },
         { slug: "pandas", label: "pandas" },
       ];
+      const DIFF_CN = { EASY: "简单", MEDIUM: "中等", HARD: "困难" };
+      // Companies shown on the site's problemset rail; these open the official
+      // pages because their rankings are not exposed by a stable public API.
+      const COMPANIES = [
+        ["字节跳动", "/company/bytedance/"], ["华为", "/company/huawei/"], ["亚马逊", "/company/amazon/"],
+        ["苹果", "/company/apple/"], ["谷歌", "/company/google/"], ["腾讯", "/company/tencent/"],
+        ["Meta", "/company/meta/"], ["微软", "/company/microsoft/"], ["阿里巴巴", "/company/alibaba/"],
+        ["美团", "/company/meituan/"], ["英伟达", "/company/nvidia/"], ["Shopee", "/company/shopee/"],
+      ];
 
       async function call(method, params, timeoutMs) {
         const res = await window.dbxPlugin.request("backend.invoke", { method, params: params || {}, timeoutMs: timeoutMs || 60000 });
@@ -187,34 +260,96 @@
       }
       const esc = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
       const diffClass = (d) => "diff-" + String(d || "").toLowerCase().replace(/^\w/, (c) => c.toUpperCase());
+      const num = (v) => (typeof v === "number" && isFinite(v) ? v : Number(v) || 0);
+      const currentFilters = () => {
+        const filters = {};
+        if ($("#difficulty").value) filters.difficulty = $("#difficulty").value;
+        if ($("#status").value) filters.status = $("#status").value;
+        if (state.tags.length) filters.tags = state.tags.slice();
+        return filters;
+      };
+      const filterKey = () => JSON.stringify([state.categorySlug, currentFilters(), $("#search").value.trim()]);
+
+      // Rows in scope: the server page (default order) or the whole filtered set
+      // (when a local sort or 只看收藏 is active, so ordering is not page-local).
+      function computeRows() {
+        let rows = state.questions.slice();
+        if (state.onlyFavs) rows = rows.filter((q) => q.isFavor);
+        if (state.sortField) {
+          const keys = {
+            FRONTEND_ID: (q) => num(q.frontendQuestionId),
+            DIFFICULTY: (q) => ({ EASY: 1, MEDIUM: 2, HARD: 3 }[String(q.difficulty || "").toUpperCase()] || 0),
+            AC_RATE: (q) => num(q.acRate),
+            FREQUENCY: (q) => num(q.frequency),
+            CONTEST_POINT: (q) => num(q.contestPoint),
+          };
+          const key = keys[state.sortField] || keys.FRONTEND_ID;
+          const dir = state.sortDesc ? -1 : 1;
+          rows.sort((a, b) => (key(a) - key(b)) * dir);
+        }
+        return rows;
+      }
 
       function renderList() {
         const body = $("#qbody");
-        // When the keyword already went to the server, do not re-filter the page
-        // locally: server search also matches statement content, which the local
-        // title-only check would wrongly hide.
+        const rows = computeRows();
+        const start = (state.page - 1) * state.pageSize;
+        // When the keyword already went to the server, do not re-filter locally:
+        // server search also matches statement content.
         const kw = state.searching ? "" : $("#search").value.trim().toLowerCase();
-        const shown = kw
-          ? state.questions.filter((q) => (String(q.titleCn || "") + String(q.title || "") + String(q.frontendQuestionId || "")).toLowerCase().includes(kw))
-          : state.questions;
-        body.innerHTML = shown.map((q) => `
+        const page = rows.slice(start, start + state.pageSize).filter((q) => !kw
+          || (String(q.titleCn || "") + String(q.title || "") + String(q.frontendQuestionId || "")).toLowerCase().includes(kw));
+        state.pageRows = page;
+        body.innerHTML = page.map((q) => {
+          const tags = (q.topicTags || []).slice(0, 3).map((t) => esc(t.nameTranslated || t.translatedName || t.name || t.slug)).join("、");
+          return `
           <tr class="q ${q.titleSlug === state.activeSlug ? "active" : ""}" data-slug="${esc(q.titleSlug)}">
             <td>${q.status === "AC" ? '<span class="ac">✓</span>' : ""}</td>
-            <td class="title">[${q.frontendQuestionId}] ${esc(q.titleCn || q.title || q.titleSlug)}</td>
-            <td>${q.acRate != null ? (q.acRate * 100).toFixed(1) + "%" : "-"}</td>
-            <td class="${diffClass(q.difficulty)}">${esc(q.difficulty || "")}</td>
-          </tr>`).join("");
-        body.querySelectorAll("tr.q").forEach((tr) => tr.addEventListener("click", () => openProblem(tr.dataset.slug)));
+            <td class="title">[${esc(q.frontendQuestionId)}] ${esc(q.titleCn || q.title || q.titleSlug)}${q.paidOnly ? ' <span class="pill">Plus</span>' : ""}</td>
+            <td class="muted" style="white-space:normal">${tags || "-"}</td>
+            <td>${q.acRate != null ? (num(q.acRate) * 100).toFixed(1) + "%" : "-"}</td>
+            <td class="${diffClass(q.difficulty)}">${esc(DIFF_CN[String(q.difficulty || "").toUpperCase()] || q.difficulty || "")}</td>
+            <td class="fav ${q.isFavor ? "on" : ""}" data-fav="${esc(q.titleSlug)}" title="${q.isFavor ? "取消收藏" : "收藏"}">${q.isFavor ? "★" : "☆"}</td>
+          </tr>`;
+        }).join("") || `<tr><td colspan="6" class="muted">没有符合条件的题目</td></tr>`;
+        body.querySelectorAll("tr.q").forEach((tr) => tr.addEventListener("click", (e) => {
+          if (e.target && e.target.classList.contains("fav")) return;
+          openProblem(tr.dataset.slug);
+        }));
+        body.querySelectorAll(".fav").forEach((cell) => cell.addEventListener("click", (e) => {
+          e.stopPropagation();
+          toggleFav(cell.dataset.fav, cell);
+        }));
         renderPager();
       }
 
+      async function toggleFav(slug, cell) {
+        const row = (state.pageRows || []).find((q) => q.titleSlug === slug);
+        const next = !(row && row.isFavor);
+        try {
+          await call("leetcode/toggle_favorite", { titleSlug: slug, favorite: next }, 20000);
+          if (row) row.isFavor = next;
+          // Reflect the change in the full set too, so sorting/paging stays right.
+          const hit = state.questions.find((q) => q.titleSlug === slug);
+          if (hit) hit.isFavor = next;
+          renderList();
+        } catch (e) {
+          $("#listStatus").textContent = "收藏失败：" + e.message;
+        }
+      }
+
       function renderPager() {
-        const totalPages = Math.max(1, Math.ceil((state.total || 0) / state.pageSize));
-        $("#pager").classList.toggle("hidden", !state.total);
+        // Paging is local whenever a sort or 只看收藏 is applied, because the
+        // ordering/ filtering spans the whole set rather than one server page.
+        const scoped = computeRows().length;
+        const shown = state.sortField || state.onlyFavs ? scoped : (state.total || scoped);
+        const totalPages = Math.max(1, Math.ceil(shown / state.pageSize));
+        if (state.page > totalPages) { state.page = totalPages; }
+        $("#pager").classList.toggle("hidden", !shown);
         $("#pageInput").value = state.page;
         $("#pageInput").max = totalPages;
         $("#pageInfo").textContent = `/ ${totalPages} 页`;
-        $("#totalInfo").textContent = `共 ${state.total} 题`;
+        $("#totalInfo").textContent = state.onlyFavs ? `收藏 ${scoped} 题` : `共 ${shown} 题`;
         $("#prevBtn").disabled = state.page <= 1;
         $("#nextBtn").disabled = state.page >= totalPages;
       }
@@ -245,17 +380,21 @@
 
       function renderTags() {
         const bar = $("#tags");
+        const toggle = $("#tagsToggle");
         if (!state.allTags.length) return;
-        const visible = state.tagsExpanded ? state.allTags : state.allTags.slice(0, 12);
         const label = (t) => t.translatedName || t.name || t.slug;
-        bar.innerHTML = visible.map((t) => `
+        // Chips live in a clipped scroller and the toggle sits outside it, so the
+        // control can never be cut off by the collapsed height.
+        bar.innerHTML = state.allTags.map((t) => `
           <button type="button" class="tag" data-slug="${esc(t.slug)}" aria-pressed="${state.tags.includes(t.slug)}">${esc(label(t))}<span class="n">${t.count}</span></button>
-        `).join("") + (state.allTags.length > 12
-          ? `<button type="button" class="tag more" id="tagsMore">${state.tagsExpanded ? "收起 ▲" : `展开 ${state.allTags.length - 12} 个标签 ▼`}</button>`
-          : "") + (state.tags.length
-            ? `<button type="button" class="tag more" id="tagsClear">清除标签</button>`
-            : "");
-        bar.classList.toggle("collapsed", !state.tagsExpanded);
+        `).join("");
+        bar.classList.toggle("clip", !state.tagsExpanded);
+        if (state.allTags.length > 12) {
+          toggle.hidden = false;
+          toggle.textContent = state.tagsExpanded ? "收起 ▲" : `展开全部 ${state.allTags.length} 个标签 ▼`;
+        } else {
+          toggle.hidden = true;
+        }
         bar.querySelectorAll(".tag[data-slug]").forEach((btn) => btn.addEventListener("click", () => {
           const slug = btn.dataset.slug;
           const at = state.tags.indexOf(slug);
@@ -263,10 +402,6 @@
           renderTags();
           loadProblems(true);
         }));
-        const more = $("#tagsMore");
-        if (more) more.addEventListener("click", () => { state.tagsExpanded = !state.tagsExpanded; renderTags(); });
-        const clear = $("#tagsClear");
-        if (clear) clear.addEventListener("click", () => { state.tags = []; renderTags(); loadProblems(true); });
       }
 
       function activeFilterSummary() {
@@ -278,37 +413,57 @@
           return hit ? (hit.translatedName || hit.name || slug) : slug;
         }).join("、"));
         if (state.searching) parts.push(`搜索「${$("#search").value.trim()}」`);
+        if (state.onlyFavs) parts.push("只看收藏");
+        if (state.sortField) {
+          const label = { FRONTEND_ID: "题号", DIFFICULTY: "难度", AC_RATE: "通过率", FREQUENCY: "出题频率", CONTEST_POINT: "竞赛分" }[state.sortField];
+          parts.push(`按${label}${state.sortDesc ? "降序" : "升序"}`);
+        }
         return parts.filter(Boolean).join(" · ");
       }
 
+      // Latest-click-wins: dropping a click because a request is in flight looks
+      // exactly like a dead button, so stale responses are discarded instead.
+      let requestSeq = 0;
       async function loadProblems(reset) {
-        if (state.loading) return;
+        const mine = ++requestSeq;
         state.loading = true;
         if (reset) { state.page = 1; }
-        $("#listStatus").textContent = "加载中…";
-        const skip = (state.page - 1) * state.pageSize;
+        const key = filterKey();
+        const needFull = !!(state.sortField || state.onlyFavs);
+        $("#listStatus").textContent = needFull && state.fullSetKey !== key ? "载入完整筛选结果以排序…" : "加载中…";
         try {
           const keyword = $("#search").value.trim();
-          const filters = {};
-          if ($("#difficulty").value) filters.difficulty = $("#difficulty").value;
-          if ($("#status").value) filters.status = $("#status").value;
-          if (state.tags.length) filters.tags = state.tags.slice();
-          const data = await call("leetcode/list_problems", {
-            skip, limit: state.pageSize, filters,
-            categorySlug: state.categorySlug,
-            searchKeyword: keyword,
-          });
+          const filters = currentFilters();
+          if (needFull) {
+            // Sorting/favouriting must span the whole selection, so pull the
+            // filtered set once (cached per filter combination) and work locally.
+            if (state.fullSetKey !== key || !state.fullSet) {
+              const all = await call("leetcode/list_all", { filters, categorySlug: state.categorySlug, maxQuestions: 1500 }, 180000);
+              state.fullSet = all.questions || [];
+              state.fullSetKey = key;
+              state.fullTruncated = !!all.truncated;
+            }
+            state.questions = state.fullSet.slice();
+            state.total = state.fullSet.length;
+          } else {
+            const skip = (state.page - 1) * state.pageSize;
+            const data = await call("leetcode/list_problems", { skip, limit: state.pageSize, filters, categorySlug: state.categorySlug, searchKeyword: keyword });
+            state.questions = data.questions || [];
+            state.total = data.total || state.questions.length;
+          }
           state.searching = !!keyword;
-          state.questions = data.questions || [];
-          state.total = data.total || state.questions.length;
           $("#qtable").classList.remove("hidden");
-          const from = state.total ? skip + 1 : 0;
-          const to = skip + state.questions.length;
-          $("#listStatus").textContent = `${activeFilterSummary()} · 共 ${state.total} 题，显示 ${from}-${to}`;
+          if (mine !== requestSeq) return;
+          const rows = computeRows();
+          const start = (state.page - 1) * state.pageSize;
+          const from = rows.length ? start + 1 : 0;
+          const to = Math.min(start + state.pageSize, rows.length);
+          $("#listStatus").textContent = `${activeFilterSummary()} · 共 ${state.sortField || state.onlyFavs ? rows.length : state.total} 题，显示 ${from}-${to}`
+            + (state.fullTruncated && (state.sortField || state.onlyFavs) ? "（仅在前 1500 题内排序）" : "");
           renderList();
         } catch (e) {
-          $("#listStatus").textContent = "加载失败：" + e.message;
-        } finally { state.loading = false; }
+          if (mine === requestSeq) $("#listStatus").textContent = "加载失败：" + e.message;
+        } finally { if (mine === requestSeq) state.loading = false; }
       }
 
       const KW = {
@@ -492,7 +647,8 @@
       }
       function afterLogin(r, label) {
         $("#login").classList.add("hidden");
-        $("#who").textContent = "已登录：" + whoText(r, label);
+        renderMe({ authenticated: true, username: (r && r.username) || label || "", nickname: r && r.nickname });
+        loadDaily();
         return loadProblems(true);
       }
 
@@ -575,8 +731,90 @@
       $("#resetBtn").addEventListener("click", () => {
         $("#search").value = ""; $("#difficulty").value = ""; $("#status").value = "";
         state.tags = []; state.categorySlug = ""; state.searching = false; state.tagsExpanded = false;
+        state.sortField = ""; state.sortDesc = false; state.onlyFavs = false;
+        $("#sortField").value = ""; $("#sortDir").textContent = "↑";
         renderCats(); renderTags(); loadProblems(true);
       });
+      $("#tagsToggle").addEventListener("click", () => { state.tagsExpanded = !state.tagsExpanded; renderTags(); });
+
+      // 排序：非默认顺序需要覆盖整个筛选结果，因此走本地排序（loadProblems 会拉全量）。
+      $("#sortField").addEventListener("change", () => {
+        state.sortField = $("#sortField").value;
+        if (!state.sortField) state.fullSetKey = "";
+        loadProblems(true);
+      });
+      $("#sortDir").addEventListener("click", () => {
+        state.sortDesc = !state.sortDesc;
+        $("#sortDir").textContent = state.sortDesc ? "↓" : "↑";
+        if (!state.sortField) { $("#sortField").value = "FRONTEND_ID"; state.sortField = "FRONTEND_ID"; loadProblems(true); }
+        else { renderList(); $("#listStatus").textContent = activeFilterSummary(); }
+      });
+
+      // 随机一题：在当前筛选结果的范围内抽一道，避免"随机"永远落在第一页。
+      $("#randomBtn").addEventListener("click", async () => {
+        try {
+          const total = Math.max(1, state.total || 1);
+          const skip = Math.floor(Math.random() * Math.min(total, 1000));
+          const data = await call("leetcode/list_problems", { skip, limit: 1, filters: currentFilters(), categorySlug: state.categorySlug });
+          const q = (data.questions || [])[0];
+          if (!q) { $("#listStatus").textContent = "当前筛选下没有题目"; return; }
+          await openProblem(q.titleSlug);
+        } catch (e) {
+          $("#listStatus").textContent = "随机一题失败：" + e.message;
+        }
+      });
+
+      function switchView(view) {
+        document.querySelectorAll("#nav .nav-item[data-view]").forEach((btn) => {
+          btn.setAttribute("aria-current", btn.dataset.view === view ? "page" : "false");
+        });
+        state.onlyFavs = view === "favs";
+        showList();
+        if (view === "daily") { openDaily(); return; }
+        loadProblems(true);
+      }
+      document.querySelectorAll("#nav .nav-item[data-view]").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+      document.querySelectorAll("#nav .nav-item.site").forEach((btn) => btn.addEventListener("click", async () => {
+        try { await call("leetcode/open_site", { path: btn.dataset.path }, 15000); }
+        catch (e) { $("#listStatus").textContent = "打开官网失败：" + e.message; }
+      }));
+
+      function renderCompanies() {
+        $("#companies").innerHTML = COMPANIES.map(([name, path]) => `<button type="button" data-path="${esc(path)}">${esc(name)}</button>`).join("");
+        $("#companies").querySelectorAll("button").forEach((btn) => btn.addEventListener("click", async () => {
+          try { await call("leetcode/open_site", { path: btn.dataset.path }, 15000); } catch (e) { /* surfaced below */ }
+        }));
+      }
+
+      async function loadDaily() {
+        try {
+          const rec = await call("leetcode/daily_question", {}, 20000);
+          const q = rec && rec.question;
+          if (!q) { $("#dailyBody").textContent = "今日暂无题目"; return; }
+          state.daily = q;
+          $("#dailyBody").innerHTML = `
+            <div class="muted" style="font-size:11px;margin-bottom:4px">${esc(rec.date || "")} · ${esc(DIFF_CN[String(q.difficulty || "").toUpperCase()] || q.difficulty || "")}</div>
+            <div class="daily-q" data-slug="${esc(q.titleSlug)}">[${esc(q.questionFrontendId)}] ${esc(q.translatedTitle || q.title)}</div>`;
+          $("#dailyBody .daily-q").addEventListener("click", () => openProblem(q.titleSlug));
+        } catch (e) {
+          $("#dailyBody").textContent = "每日一题加载失败";
+        }
+      }
+
+      function openDaily() {
+        if (state.daily && state.daily.titleSlug) { openProblem(state.daily.titleSlug); return; }
+        $("#listStatus").textContent = "每日一题还没加载出来，稍后再试。";
+        showList();
+      }
+
+      function renderMe(status) {
+        const who = $("#who");
+        if (!status || !status.authenticated) { who.innerHTML = ""; return; }
+        const name = status.nickname || status.username || "";
+        // 沙箱 CSP 不允许加载站外图片，所以头像用首字母圆形徽章，而不是 <img src>。
+        const initial = esc((name || "?").slice(0, 1).toUpperCase());
+        who.innerHTML = `<span class="avatar" title="力扣头像需联网，插件沙箱内以首字母代替">${initial}</span> 已登录：${esc(name)}${status.username && status.nickname ? `（${esc(status.username)}）` : ""}`;
+      }
 
       function totalPages() { return Math.max(1, Math.ceil((state.total || 0) / state.pageSize)); }
       function goToPage(n) {
@@ -613,12 +851,14 @@
 
       window.dbxPlugin.ready.then(async () => {
         renderCats();
+        renderCompanies();
         loadTags();
+        loadDaily();
         try {
           const s = await call("leetcode/status", {});
           if (s && s.authenticated) {
             $("#login").classList.add("hidden");
-            $("#who").textContent = "已登录：" + whoText(s, "");
+            renderMe(s);
             await loadProblems(true);
           }
         } catch (e) { /* stay on login screen */ }

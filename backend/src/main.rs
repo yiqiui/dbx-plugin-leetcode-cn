@@ -16,8 +16,18 @@ const LIST_QUERY: &str = r#"query problemsetQuestionList($categorySlug: String, 
   problemsetQuestionList(categorySlug: $categorySlug, limit: $limit, skip: $skip, filters: $filters) {
     total
     questions {
-      acRate difficulty frontendQuestionId title titleCn titleSlug paidOnly status
+      acRate difficulty frontendQuestionId title titleCn titleSlug paidOnly status isFavor
       topicTags { name slug nameTranslated }
+    }
+  }
+}"#;
+
+/// 每日一题。字段名已对线上 schema 校验过（`question` 需要子选择集）。
+const DAILY_QUERY: &str = r#"query todayRecord {
+  todayRecord {
+    date
+    question {
+      titleSlug questionFrontendId title translatedTitle difficulty acRate
     }
   }
 }"#;
@@ -61,6 +71,8 @@ struct Session {
     csrf: String,
     username: String,
     realname: String,
+    avatar: String,
+    user_slug: String,
 }
 
 impl Session {
@@ -640,16 +652,20 @@ impl LeetCodePlugin {
 
     fn current_username(&self) -> Result<String, PluginError> {
         let data = self.graphql(
-            "query globalData { userStatus { username realName isSignedIn } }",
+            "query globalData { userStatus { username realName isSignedIn avatar userSlug } }",
             json!({}),
         )?;
         let status = data.get("userStatus").cloned().unwrap_or(Value::Null);
         if status.get("isSignedIn").and_then(Value::as_bool).unwrap_or(false) {
             let username = status.get("username").and_then(Value::as_str).unwrap_or_default().to_string();
             let realname = status.get("realName").and_then(Value::as_str).unwrap_or_default().to_string();
+            let avatar = status.get("avatar").and_then(Value::as_str).unwrap_or_default().to_string();
+            let user_slug = status.get("userSlug").and_then(Value::as_str).unwrap_or_default().to_string();
             if let Ok(mut s) = self.session.lock() {
                 s.username = username.clone();
                 s.realname = realname;
+                s.avatar = avatar;
+                s.user_slug = user_slug;
             }
             Ok(username)
         } else {
@@ -732,6 +748,56 @@ impl LeetCodePlugin {
         }
         tags.sort_by_key(|tag| std::cmp::Reverse(tag.get("count").and_then(Value::as_i64).unwrap_or(0)));
         Ok(json!({ "tags": tags, "total": tags.len() }))
+    }
+
+    /// 每日一题（题面摘要 + 跳转用的 slug）。
+    ///
+    /// `todayRecord` answers with a one-element list rather than a single node,
+    /// so unwrap it here instead of teaching every caller about that quirk.
+    fn daily_question(&self) -> Result<Value, PluginError> {
+        let data = self.graphql(DAILY_QUERY, json!({}))?;
+        let record = data.get("todayRecord").cloned().unwrap_or(Value::Null);
+        Ok(match record {
+            Value::Array(items) => items.into_iter().next().unwrap_or(Value::Null),
+            other => other,
+        })
+    }
+
+    /// Collect the whole filtered set so sorting is over *all* matches rather
+    /// than just the visible page. The public list caps `limit` at 100, so this
+    /// walks pages; `max_questions` bounds the work for huge selections.
+    fn list_all(&self, filters: Value, category_slug: &str, max_questions: i64) -> Result<Value, PluginError> {
+        const PAGE: i64 = 100;
+        let cap = max_questions.clamp(1, 5000);
+        let mut questions: Vec<Value> = Vec::new();
+        let mut total = 0i64;
+        let mut truncated = false;
+        let mut skip = 0i64;
+        loop {
+            let data = self.graphql(
+                LIST_QUERY,
+                json!({ "categorySlug": category_slug, "skip": skip, "limit": PAGE, "filters": filters }),
+            )?;
+            let list = data.get("problemsetQuestionList").cloned().unwrap_or_else(|| json!({}));
+            if questions.is_empty() {
+                total = list.get("total").and_then(Value::as_i64).unwrap_or(0);
+            }
+            let page = list.get("questions").and_then(Value::as_array).cloned().unwrap_or_default();
+            if page.is_empty() {
+                break;
+            }
+            let fetched = page.len() as i64;
+            questions.extend(page);
+            skip += fetched;
+            if (questions.len() as i64) >= total.max(1) || skip >= total {
+                break;
+            }
+            if skip >= cap {
+                truncated = true;
+                break;
+            }
+        }
+        Ok(json!({ "total": total, "questions": questions, "truncated": truncated }))
     }
 
     fn get_problem(&self, title_slug: &str) -> Result<Value, PluginError> {
@@ -1108,8 +1174,21 @@ impl PluginHandler for LeetCodePlugin {
         match method {
             "leetcode/status" => {
                 let username = self.current_username().unwrap_or_default();
-                let nickname = self.session.lock().map(|s| s.realname.clone()).unwrap_or_default();
-                Ok(json!({ "authenticated": !username.is_empty(), "username": username, "nickname": nickname }))
+                let session = self.session.lock().map(|s| (s.realname.clone(), s.avatar.clone(), s.user_slug.clone())).unwrap_or_default();
+                Ok(json!({
+                    "authenticated": !username.is_empty(),
+                    "username": username,
+                    "nickname": session.0,
+                    "avatar": session.1,
+                    "userSlug": session.2,
+                }))
+            }
+            "leetcode/daily_question" => self.daily_question(),
+            "leetcode/list_all" => {
+                let filters = params.get("filters").cloned().unwrap_or_else(|| json!({}));
+                let category_slug = params.get("categorySlug").and_then(Value::as_str).unwrap_or("");
+                let max = params.get("maxQuestions").and_then(Value::as_i64).unwrap_or(1500);
+                self.list_all(filters, category_slug, max)
             }
             "leetcode/login" => self.login(&get_str("login"), &get_str("password")),
             "leetcode/send_code" => self.send_code(&get_str("target")),
@@ -1117,6 +1196,15 @@ impl PluginHandler for LeetCodePlugin {
             "leetcode/login_cookie" => self.login_cookie(&get_str("session"), &get_str("csrf")),
             "leetcode/read_browser_cookies" => read_browser_leetcode_cookies(),
             "leetcode/open_login_browser" => open_system_browser(&format!("{BASE}/accounts/login/?next=/")),
+            // 站内无法复刻的板块（探险模式 / LeetBook / 学习计划 / 企业题库）走系统浏览器，
+            // 只允许 leetcode.cn，避免变成一个任意的 URL 打开器。
+            "leetcode/open_site" => {
+                let path = get_str("path");
+                if !path.starts_with('/') || path.starts_with("//") {
+                    return Err(err("path must be an absolute leetcode.cn path"));
+                }
+                open_system_browser(&format!("{BASE}{path}"))
+            }
             "leetcode/browser_login_start" => self.browser_login_start(),
             "leetcode/browser_login_poll" => self.browser_login_poll(),
             "leetcode/browser_login_cancel" => {

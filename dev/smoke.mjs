@@ -75,6 +75,29 @@ try {
 
   const paged = await call("leetcode/list_problems", { skip: 5, limit: 3, filters: {} });
   check("paging still works", (paged.questions || []).length === 3 && paged.questions[0].frontendQuestionId !== "1", JSON.stringify(paged.questions?.map((q) => q.frontendQuestionId)));
+  check("rows carry the favourite flag", "isFavor" in (paged.questions?.[0] || {}), JSON.stringify(paged.questions?.[0]).slice(0, 160));
+
+  const daily = await call("leetcode/daily_question", {});
+  check("daily question resolves", daily && daily.question?.titleSlug, JSON.stringify(daily).slice(0, 160));
+  check("daily question has a Chinese title + difficulty", !!daily.question?.translatedTitle && !!daily.question?.difficulty, JSON.stringify(daily.question).slice(0, 160));
+
+  // Narrow selection so the full-set walk stays cheap (Shell has 4 questions).
+  const all = await call("leetcode/list_all", { categorySlug: "shell", filters: {}, maxQuestions: 200 });
+  check("list_all returns the whole selection", (all.questions || []).length === all.total && all.total === 4, `len=${all.questions?.length} total=${all.total}`);
+  check("list_all reports no truncation for a small set", all.truncated === false, JSON.stringify(all).slice(0, 120));
+
+  try {
+    await call("leetcode/open_site", { path: "https://example.com" });
+    check("open_site rejects non-absolute paths", false, "it accepted an absolute URL");
+  } catch (error) {
+    check("open_site rejects non-absolute paths", /absolute/.test(String(error.message)), error.message);
+  }
+  try {
+    await call("leetcode/open_site", { path: "//evil.example.com" });
+    check("open_site rejects protocol-relative URLs", false, "it accepted //host");
+  } catch (error) {
+    check("open_site rejects protocol-relative URLs", /absolute/.test(String(error.message)), error.message);
+  }
 
   try {
     await call("leetcode/list_problems", { skip: 0, limit: 5, searchKeyword: "two sum", filters: {} });

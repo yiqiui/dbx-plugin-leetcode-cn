@@ -1,5 +1,7 @@
 backend/target/
 bin/
+dist/
+node_modules/
 .dbx-dev/
 .artifact.json
 

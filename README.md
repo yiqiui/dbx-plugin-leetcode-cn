@@ -7,7 +7,7 @@
 ## 功能
 
 - **免粘贴登录**：插件启动一个受控的 Chrome/Edge 窗口打开力扣官方登录页，你用账号密码 / 手机验证码登录（极验滑块在真实浏览器里可正常通过），插件通过 Chrome DevTools 协议读回已解密的会话 Cookie，自动完成登录——无需手动复制粘贴。
-- **题库浏览**：题号 / 标题（中文）/ 通过率 / 难度 / 我的状态；支持按难度、标签筛选，标题/题号搜索，**分页**（可切换每页 15/30/50/100，翻页 / 跳转）。
+- **题库浏览**：题号 / 标题（中文）/ 通过率 / 难度 / 我的状态；**官方分类页签**（全部题目 / 算法 / 数据库 / Shell / 多线程 / JavaScript / pandas）、**79 个标签芯片带实时题数**（数组 2430、字符串 966…计数直接取力扣接口，可多选、可展开收起）、难度与**作答状态**（已解答 / 未尝试 / 尝试过）筛选、**服务端关键词搜索**，以及**分页**（每页 15/30/50/100，翻页 / 跳转）。
 - **做题页**：点击题目进入独立做题视图，左侧题面、右侧代码编辑器，中间分隔线可**左右拖动**调整宽度，支持**全屏 / 退出全屏**。
 - **代码编辑器**：按语言自动**语法高亮**（关键字 / 字符串 / 注释 / 数字），带**行号**、Tab 缩进、回车智能缩进；语言下拉来自题面 `codeSnippets`。
 - **运行 / 提交判题**：展示状态、用时、内存、输出、编译错误。
@@ -45,7 +45,8 @@ DBX 插件只有 `host.workbench` / `host.binary` / `host.network` 三种能力�
 | `leetcode/send_code` / `leetcode/login_code` | `{ target }` / `{ target, code }` | 短信验证码登录（通常被极验拦截，兜底） |
 | `leetcode/read_browser_cookies` / `leetcode/login_auto` | — | 读取本机浏览器 Cookie 文件（现代 Chrome/Edge 会失败，备用） |
 | `leetcode/logout` | — | 清空会话 |
-| `leetcode/list_problems` | `{ skip, limit, filters }` | `problemsetQuestionList` 拉题单 |
+| `leetcode/list_problems` | `{ skip, limit, filters, categorySlug?, searchKeyword? }` | `filters` 支持 `{ tags: [slug], difficulty, status }`；`categorySlug` 对应官方页签（注意数据库是单数 `database`）；`searchKeyword` 走 V2 接口，**需登录** |
+| `leetcode/topic_tags` | — | `questionTopicTags`，返回全部标签及各自题数（按题数降序） |
 | `leetcode/get_problem` | `{ titleSlug }` | `question` 拉题面 + 代码模板（含 `isPaidOnly`） |
 | `leetcode/run_code` | `{ titleSlug, lang, code, inputs? }` | `interpret_solution` 运行样例 |
 | `leetcode/submit_code` | `{ titleSlug, lang, code }` | `submit` 提交判题 |
@@ -64,7 +65,13 @@ cargo build --release
 # 产物：backend/target/release/dbx-leetcode-cn(.exe)
 ```
 
-打包（`dbx-plugin package`）会为各目标平台产出 `.dbxp`，并把 manifest 里的后端可执行路径改写成平台特定路径（如 `bin/windows-x64/dbx-leetcode-cn.exe`）——这是运行时解析后端所必需的。
+打包（`dbx-plugin package`）会为各目标平台产出 `.dbxp`，并把 manifest 里的后端可执行路径改写成平台特定路径（如 `bin/windows-x64/dbx-leetcode-cn.exe`）——这是运行时解析后端所必需的。本地执行 `dbx-plugin package .` 时同样要 SDK 路径，用环境变量提供：`DBX_PLUGIN_SDK_ROOT=<dbx 仓库根目录> dbx-plugin package .`。
+
+冒烟测试（打真实 leetcode.cn 接口，无需登录的部分）：
+
+```bash
+node dev/smoke.mjs        # 握手 + 标签计数 + 标签/难度/状态/分类筛选 + 分页 + 未登录搜索的报错路径
+```
 
 ## 本地安装（自用，无需上架）
 
@@ -87,6 +94,8 @@ cargo build --release
 
 ## 已知限制
 
+- **服务端关键词搜索需要登录**：公开的 V1 列表接口没有搜索字段，只能走登录态的 V2 接口；未登录时界面会给出明确提示，而不是静默返回空列表。
+- **官网的题号升/降序切换未实现**：V1 列表接口不接受排序参数，而按页做本地排序会造成「只排当前页」的误导，因此暂不提供；要真正支持需缓存全量题单或改用 V2 排序入参。
 - 登录必须在插件另开的**受控浏览器窗口**里完成一次（该窗口用独立临时配置，不带平时浏览器的登录态）；这是 DBX 无内嵌浏览器 + 力扣极验风控下的可行折中。
 - 插件窗口的「全屏」指铺满插件所在工作台区域，非操作系统全屏（沙箱内无法请求 OS 全屏）。
 - 账号密码 / 短信的纯 HTTP 登录、以及读取运行中 Chrome 的 Cookie 文件，在多数现代环境下会被极验 / 文件锁 / App-Bound 加密阻断，仅作兜底。

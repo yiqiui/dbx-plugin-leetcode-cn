@@ -22,6 +22,30 @@ const LIST_QUERY: &str = r#"query problemsetQuestionList($categorySlug: String, 
   }
 }"#;
 
+/// Server-side keyword search. The public V1 list has no search field, and the
+/// V2 endpoint is login-gated, so this runs with the session cookies and the
+/// caller reports a clear "please sign in" error when it is rejected.
+const LIST_V2_QUERY: &str = r#"query problemsetQuestionListV2($categorySlug: String, $limit: Int, $skip: Int, $searchKeyword: String) {
+  problemsetQuestionListV2(categorySlug: $categorySlug, limit: $limit, skip: $skip, searchKeyword: $searchKeyword) {
+    totalLength
+    hasMore
+    questions {
+      acRate difficulty questionFrontendId title translatedTitle titleSlug paidOnly status
+      topicTags { name slug }
+    }
+  }
+}"#;
+
+/// Every topic with the ids of its questions; `questionIds.len()` reproduces the
+/// counts the official problemset shows next to each tag (数组 2430, ...).
+const TOPIC_TAGS_QUERY: &str = r#"query topicTags {
+  questionTopicTags {
+    edges {
+      node { name slug translatedName questionIds }
+    }
+  }
+}"#;
+
 const DETAIL_QUERY: &str = r#"query questionData($titleSlug: String!) {
   question(titleSlug: $titleSlug) {
     questionId questionFrontendId title titleSlug content difficulty isPaidOnly
@@ -78,6 +102,35 @@ struct Capture {
 
 fn err(msg: impl Into<String>) -> PluginError {
     PluginError::new(-32000, msg)
+}
+
+/// The V2 search endpoint names its fields differently
+/// (`questionFrontendId` / `translatedTitle`); map them onto the V1 shape so the
+/// UI keeps a single code path for both listings.
+fn normalize_v2_list(v2: Value) -> Value {
+    let rename = |obj: &mut Value, from: &str, to: &str| {
+        let Some(map) = obj.as_object_mut() else { return };
+        if let Some(value) = map.remove(from) {
+            map.insert(to.to_string(), value);
+        }
+    };
+    let questions: Vec<Value> = v2
+        .get("questions")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mut question| {
+            rename(&mut question, "questionFrontendId", "frontendQuestionId");
+            rename(&mut question, "translatedTitle", "titleCn");
+            question
+        })
+        .collect();
+    json!({
+        "total": v2.get("totalLength").cloned().unwrap_or_else(|| Value::from(questions.len())),
+        "hasMore": v2.get("hasMore").cloned().unwrap_or(Value::Bool(false)),
+        "questions": questions,
+    })
 }
 
 /// 访问 leetcode.cn 的共享 HTTP 客户端：尊重系统代理环境变量
@@ -604,16 +657,81 @@ impl LeetCodePlugin {
         }
     }
 
-    fn list_problems(&self, skip: i64, limit: i64, filters: Value) -> Result<Value, PluginError> {
+    /// One page of the problemset.
+    ///
+    /// `category_slug` drives the official tabs ("" = 全部题目, plus `shell`,
+    /// `concurrency`, `javascript`, `pandas`, …). A non-empty `search_keyword`
+    /// switches to the V2 endpoint, because the public V1 list has no search
+    /// field; V2 is login-gated, so a rejection is reported as a sign-in hint.
+    fn list_problems(
+        &self,
+        skip: i64,
+        limit: i64,
+        filters: Value,
+        category_slug: &str,
+        search_keyword: &str,
+    ) -> Result<Value, PluginError> {
+        let keyword = search_keyword.trim();
+        if !keyword.is_empty() {
+            return match self.graphql(
+                LIST_V2_QUERY,
+                json!({ "categorySlug": category_slug, "skip": skip, "limit": limit, "searchKeyword": keyword }),
+            ) {
+                Ok(data) => {
+                    let v2 = data
+                        .get("problemsetQuestionListV2")
+                        .cloned()
+                        .unwrap_or_else(|| json!({ "totalLength": 0, "questions": [] }));
+                    Ok(normalize_v2_list(v2))
+                }
+                Err(e) => Err(err(format!("搜索需要登录力扣账号：{}", e.message))),
+            };
+        }
         let data = self.graphql(
             LIST_QUERY,
-            json!({ "categorySlug": "", "skip": skip, "limit": limit, "filters": filters }),
+            json!({ "categorySlug": category_slug, "skip": skip, "limit": limit, "filters": filters }),
         )?;
         let list = data
             .get("problemsetQuestionList")
             .cloned()
             .unwrap_or_else(|| json!({ "total": 0, "questions": [] }));
         Ok(list)
+    }
+
+    /// The official tag bar: every topic with its question count, most frequent
+    /// first. Counts come from `questionIds.len()`, so they match leetcode.cn
+    /// exactly instead of being hardcoded.
+    fn topic_tags(&self) -> Result<Value, PluginError> {
+        let data = self.graphql(TOPIC_TAGS_QUERY, json!({}))?;
+        let edges = data
+            .pointer("/questionTopicTags/edges")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        let mut tags: Vec<Value> = Vec::with_capacity(edges.len());
+        for edge in edges {
+            let node = match edge.get("node") {
+                Some(node) if node.is_object() => node,
+                _ => continue,
+            };
+            let slug = node.get("slug").and_then(Value::as_str).unwrap_or_default();
+            if slug.is_empty() {
+                continue;
+            }
+            let count = node
+                .get("questionIds")
+                .and_then(Value::as_array)
+                .map(Vec::len)
+                .unwrap_or(0);
+            tags.push(json!({
+                "slug": slug,
+                "name": node.get("name").cloned().unwrap_or(Value::Null),
+                "translatedName": node.get("translatedName").cloned().unwrap_or(Value::Null),
+                "count": count,
+            }));
+        }
+        tags.sort_by_key(|tag| std::cmp::Reverse(tag.get("count").and_then(Value::as_i64).unwrap_or(0)));
+        Ok(json!({ "tags": tags, "total": tags.len() }))
     }
 
     fn get_problem(&self, title_slug: &str) -> Result<Value, PluginError> {
@@ -1029,8 +1147,11 @@ impl PluginHandler for LeetCodePlugin {
                 let skip = params.get("skip").and_then(Value::as_i64).unwrap_or(0);
                 let limit = params.get("limit").and_then(Value::as_i64).unwrap_or(30);
                 let filters = params.get("filters").cloned().unwrap_or_else(|| json!({}));
-                self.list_problems(skip, limit, filters)
+                let category_slug = params.get("categorySlug").and_then(Value::as_str).unwrap_or("");
+                let search_keyword = params.get("searchKeyword").and_then(Value::as_str).unwrap_or("");
+                self.list_problems(skip, limit, filters, category_slug, search_keyword)
             }
+            "leetcode/topic_tags" => self.topic_tags(),
             "leetcode/get_problem" => self.get_problem(&get_str("titleSlug")),
             "leetcode/toggle_favorite" => self.toggle_favorite(&get_str("titleSlug"), params.get("favorite").and_then(Value::as_bool).unwrap_or(true)),
             "leetcode/my_favorites" => self.my_favorites(),

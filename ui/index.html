@@ -34,8 +34,22 @@
       .pager select, .pager input { padding: 3px 6px; }
       .pager input.page { width: 48px; text-align: center; }
       .pager .spacer { flex: 1; }
-      .toolbar { padding: 8px 10px; display: flex; gap: 8px; border-bottom: 1px solid var(--border); }
-      .toolbar input { flex: 1; min-width: 0; }
+      .toolbar { padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--border); }
+      .toolbar .filters { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      .toolbar input#search { flex: 1; min-width: 180px; }
+      .cats { display: flex; align-items: center; gap: 2px; padding: 6px 10px 0; overflow-x: auto; scrollbar-width: thin; }
+      .cat { border: 0; background: none; color: var(--muted); padding: 6px 12px; border-radius: 8px 8px 0 0; font: inherit; font-weight: 600; cursor: pointer; white-space: nowrap; border-bottom: 2px solid transparent; }
+      .cat:hover { background: color-mix(in srgb, CanvasText 6%, transparent); color: inherit; }
+      .cat[aria-selected="true"] { color: var(--brand); border-bottom-color: var(--brand); background: color-mix(in srgb, var(--brand) 10%, transparent); }
+      .tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+      .tag { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--border); background: color-mix(in srgb, CanvasText 4%, transparent); color: inherit; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; cursor: pointer; }
+      .tag:hover { border-color: color-mix(in srgb, var(--brand) 60%, transparent); }
+      .tag .n { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; }
+      .tag[aria-pressed="true"] { background: color-mix(in srgb, var(--brand) 22%, transparent); border-color: var(--brand); font-weight: 650; }
+      .tag[aria-pressed="true"] .n { color: inherit; }
+      .tags .more { color: var(--brand); font-weight: 650; border-style: dashed; }
+      .tags.collapsed { max-height: 30px; overflow: hidden; }
+      .active-filters { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
       th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: Canvas; }
@@ -96,29 +110,25 @@
 
     <main>
       <section id="listView">
+        <nav class="cats" id="cats" role="tablist" aria-label="题目分类"></nav>
         <div class="toolbar">
-          <input id="search" placeholder="搜索题目标题 / 题号" />
-          <select id="difficulty">
-            <option value="">全部难度</option>
-            <option value="EASY">简单</option>
-            <option value="MEDIUM">中等</option>
-            <option value="HARD">困难</option>
-          </select>
-          <select id="tag">
-            <option value="">全部标签</option>
-            <option value="array">数组</option>
-            <option value="string">字符串</option>
-            <option value="hash-table">哈希表</option>
-            <option value="dynamic-programming">动态规划</option>
-            <option value="tree">树</option>
-            <option value="graph">图</option>
-            <option value="sorting">排序</option>
-            <option value="binary-search">二分查找</option>
-            <option value="linked-list">链表</option>
-            <option value="stack">栈</option>
-            <option value="two-pointers">双指针</option>
-            <option value="sliding-window">滑动窗口</option>
-          </select>
+          <div class="filters">
+            <input id="search" placeholder="搜索题目（标题 / 题号 / 关键词，需登录）" />
+            <select id="difficulty">
+              <option value="">全部难度</option>
+              <option value="EASY">简单</option>
+              <option value="MEDIUM">中等</option>
+              <option value="HARD">困难</option>
+            </select>
+            <select id="status">
+              <option value="">作答状态</option>
+              <option value="AC">已解答</option>
+              <option value="NOT_SOLVED">未尝试</option>
+              <option value="TRIED">尝试过</option>
+            </select>
+            <button id="resetBtn" type="button">重置筛选</button>
+          </div>
+          <div class="tags collapsed" id="tags"></div>
         </div>
         <div id="listStatus" class="status muted">未登录</div>
         <div style="flex:1;min-height:0;overflow:auto">
@@ -157,7 +167,19 @@
 
     <script>
       const $ = (sel) => document.querySelector(sel);
-      const state = { questions: [], page: 1, pageSize: 30, total: 0, activeSlug: null, snippets: [], loading: false };
+      const state = { questions: [], page: 1, pageSize: 30, total: 0, activeSlug: null, snippets: [], loading: false,
+                      categorySlug: "", tags: [], allTags: [], tagsExpanded: false, searching: false };
+      // The official problemset tabs. Slugs are what the site's GraphQL
+      // `categorySlug` argument expects (note the singular `database`).
+      const CATS = [
+        { slug: "", label: "全部题目" },
+        { slug: "algorithms", label: "算法" },
+        { slug: "database", label: "数据库" },
+        { slug: "shell", label: "Shell" },
+        { slug: "concurrency", label: "多线程" },
+        { slug: "javascript", label: "JavaScript" },
+        { slug: "pandas", label: "pandas" },
+      ];
 
       async function call(method, params, timeoutMs) {
         const res = await window.dbxPlugin.request("backend.invoke", { method, params: params || {}, timeoutMs: timeoutMs || 60000 });
@@ -168,7 +190,10 @@
 
       function renderList() {
         const body = $("#qbody");
-        const kw = $("#search").value.trim().toLowerCase();
+        // When the keyword already went to the server, do not re-filter the page
+        // locally: server search also matches statement content, which the local
+        // title-only check would wrongly hide.
+        const kw = state.searching ? "" : $("#search").value.trim().toLowerCase();
         const shown = kw
           ? state.questions.filter((q) => (String(q.titleCn || "") + String(q.title || "") + String(q.frontendQuestionId || "")).toLowerCase().includes(kw))
           : state.questions;
@@ -194,6 +219,68 @@
         $("#nextBtn").disabled = state.page >= totalPages;
       }
 
+      function renderCats() {
+        $("#cats").innerHTML = CATS.map((c) => `
+          <button type="button" class="cat" role="tab" data-slug="${esc(c.slug)}" aria-selected="${c.slug === state.categorySlug}">${esc(c.label)}</button>
+        `).join("");
+        $("#cats").querySelectorAll(".cat").forEach((btn) => btn.addEventListener("click", () => {
+          if (state.categorySlug === btn.dataset.slug) return;
+          state.categorySlug = btn.dataset.slug;
+          renderCats();
+          loadProblems(true);
+        }));
+      }
+
+      // Official tag bar: counts come from the site itself (questionIds.length),
+      // so 数组 2430 etc. always match leetcode.cn instead of a frozen list.
+      async function loadTags() {
+        try {
+          const data = await call("leetcode/topic_tags", {}, 30000);
+          state.allTags = data.tags || [];
+          renderTags();
+        } catch (e) {
+          $("#tags").innerHTML = `<span class="muted" style="font-size:12px">标签加载失败：${esc(e.message)}</span>`;
+        }
+      }
+
+      function renderTags() {
+        const bar = $("#tags");
+        if (!state.allTags.length) return;
+        const visible = state.tagsExpanded ? state.allTags : state.allTags.slice(0, 12);
+        const label = (t) => t.translatedName || t.name || t.slug;
+        bar.innerHTML = visible.map((t) => `
+          <button type="button" class="tag" data-slug="${esc(t.slug)}" aria-pressed="${state.tags.includes(t.slug)}">${esc(label(t))}<span class="n">${t.count}</span></button>
+        `).join("") + (state.allTags.length > 12
+          ? `<button type="button" class="tag more" id="tagsMore">${state.tagsExpanded ? "收起 ▲" : `展开 ${state.allTags.length - 12} 个标签 ▼`}</button>`
+          : "") + (state.tags.length
+            ? `<button type="button" class="tag more" id="tagsClear">清除标签</button>`
+            : "");
+        bar.classList.toggle("collapsed", !state.tagsExpanded);
+        bar.querySelectorAll(".tag[data-slug]").forEach((btn) => btn.addEventListener("click", () => {
+          const slug = btn.dataset.slug;
+          const at = state.tags.indexOf(slug);
+          if (at >= 0) state.tags.splice(at, 1); else state.tags.push(slug);
+          renderTags();
+          loadProblems(true);
+        }));
+        const more = $("#tagsMore");
+        if (more) more.addEventListener("click", () => { state.tagsExpanded = !state.tagsExpanded; renderTags(); });
+        const clear = $("#tagsClear");
+        if (clear) clear.addEventListener("click", () => { state.tags = []; renderTags(); loadProblems(true); });
+      }
+
+      function activeFilterSummary() {
+        const parts = [(CATS.find((c) => c.slug === state.categorySlug) || { label: "全部题目" }).label];
+        if ($("#difficulty").value) parts.push({ EASY: "简单", MEDIUM: "中等", HARD: "困难" }[$("#difficulty").value]);
+        if ($("#status").value) parts.push({ AC: "已解答", NOT_SOLVED: "未尝试", TRIED: "尝试过" }[$("#status").value]);
+        if (state.tags.length) parts.push(state.tags.map((slug) => {
+          const hit = state.allTags.find((t) => t.slug === slug);
+          return hit ? (hit.translatedName || hit.name || slug) : slug;
+        }).join("、"));
+        if (state.searching) parts.push(`搜索「${$("#search").value.trim()}」`);
+        return parts.filter(Boolean).join(" · ");
+      }
+
       async function loadProblems(reset) {
         if (state.loading) return;
         state.loading = true;
@@ -201,16 +288,23 @@
         $("#listStatus").textContent = "加载中…";
         const skip = (state.page - 1) * state.pageSize;
         try {
+          const keyword = $("#search").value.trim();
           const filters = {};
           if ($("#difficulty").value) filters.difficulty = $("#difficulty").value;
-          if ($("#tag").value) filters.tags = [$("#tag").value];
-          const data = await call("leetcode/list_problems", { skip, limit: state.pageSize, filters });
+          if ($("#status").value) filters.status = $("#status").value;
+          if (state.tags.length) filters.tags = state.tags.slice();
+          const data = await call("leetcode/list_problems", {
+            skip, limit: state.pageSize, filters,
+            categorySlug: state.categorySlug,
+            searchKeyword: keyword,
+          });
+          state.searching = !!keyword;
           state.questions = data.questions || [];
           state.total = data.total || state.questions.length;
           $("#qtable").classList.remove("hidden");
           const from = state.total ? skip + 1 : 0;
           const to = skip + state.questions.length;
-          $("#listStatus").textContent = `共 ${state.total} 题，显示 ${from}-${to}`;
+          $("#listStatus").textContent = `${activeFilterSummary()} · 共 ${state.total} 题，显示 ${from}-${to}`;
           renderList();
         } catch (e) {
           $("#listStatus").textContent = "加载失败：" + e.message;
@@ -472,9 +566,17 @@
       $("#oneClickLoginBtn").addEventListener("click", doOneClickLogin);
       $("#logoutBtn").addEventListener("click", async () => { try { await call("leetcode/logout", {}); } catch {} location.reload(); });
       $("#refreshBtn").addEventListener("click", () => loadProblems(true));
-      $("#search").addEventListener("input", () => renderList());
+      let searchTimer = null;
+      const queueSearch = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => loadProblems(true), 450); };
+      $("#search").addEventListener("input", queueSearch);
+      $("#search").addEventListener("keydown", (e) => { if (e.key === "Enter") { clearTimeout(searchTimer); loadProblems(true); } });
       $("#difficulty").addEventListener("change", () => loadProblems(true));
-      $("#tag").addEventListener("change", () => loadProblems(true));
+      $("#status").addEventListener("change", () => loadProblems(true));
+      $("#resetBtn").addEventListener("click", () => {
+        $("#search").value = ""; $("#difficulty").value = ""; $("#status").value = "";
+        state.tags = []; state.categorySlug = ""; state.searching = false; state.tagsExpanded = false;
+        renderCats(); renderTags(); loadProblems(true);
+      });
 
       function totalPages() { return Math.max(1, Math.ceil((state.total || 0) / state.pageSize)); }
       function goToPage(n) {
@@ -510,9 +612,15 @@
       })();
 
       window.dbxPlugin.ready.then(async () => {
+        renderCats();
+        loadTags();
         try {
           const s = await call("leetcode/status", {});
-          if (s && s.authenticated) { $("#login").classList.add("hidden"); $("#who").textContent = "已登录：" + whoText(s, ""); await loadProblems(true); }
+          if (s && s.authenticated) {
+            $("#login").classList.add("hidden");
+            $("#who").textContent = "已登录：" + whoText(s, "");
+            await loadProblems(true);
+          }
         } catch (e) { /* stay on login screen */ }
       });
     </script>

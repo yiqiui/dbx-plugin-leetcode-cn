@@ -25,6 +25,9 @@ const FULL_ROWS = [row(1, "EASY", 0.52, true), row(2, "MEDIUM", 0.44, false), ro
 const calls = [];
 let lastListParams = null;
 let lastAllParams = null;
+let lastFavParams = null;
+let lastPlanParams = null;
+let favResult = { ok: true };
 
 const dom = new JSDOM(html, {
   runScripts: "dangerously",
@@ -47,7 +50,16 @@ const dom = new JSDOM(html, {
         }
         if (method === "leetcode/list_all") { lastAllParams = params; return Promise.resolve({ total: FULL_ROWS.length, questions: FULL_ROWS, truncated: false }); }
         if (method === "leetcode/daily_question") return Promise.resolve({ date: "2026-09-23", question: { titleSlug: "slug-7", questionFrontendId: "7", title: "Reverse", translatedTitle: "整数反转", difficulty: "MEDIUM", acRate: 0.35 } });
-        if (method === "leetcode/toggle_favorite") return Promise.resolve({ code: 0 });
+        if (method === "leetcode/toggle_favorite") return Promise.resolve(favResult);
+        if (method === "leetcode/favorite_questions") { lastFavParams = params; return Promise.resolve({ totalLength: 2, hasMore: false, questions: [
+          { questionFrontendId: "49", title: "Group Anagrams", translatedTitle: "字母异位词分组", titleSlug: "group-anagrams", difficulty: "MEDIUM", acRate: 0.66, status: "AC", paidOnly: false, isInMyFavorites: true, topicTags: [{ slug: "hash-table", name: "Hash Table" }] },
+          { questionFrontendId: "128", title: "Longest Consecutive", translatedTitle: "最长连续序列", titleSlug: "longest-consecutive", difficulty: "MEDIUM", acRate: 0.51, status: "-", paidOnly: false, isInMyFavorites: true, topicTags: [] },
+        ] }); }
+        if (method === "leetcode/study_plans") { lastPlanParams = params; return Promise.resolve(params.catalogSlug
+          ? { total: 2, hasMore: false, studyPlans: [{ slug: "top-100-liked", name: "热题 100", questionNum: 100, premiumOnly: false, highlight: "经典题单" }] }
+          : { catalogs: [{ name: "精选", slug: "featured", recommendedStudyPlans: null }] }); }
+        if (method === "leetcode/avatar") return Promise.resolve({ avatar: "data:image/png;base64,iVBORw0KGgo=" });
+        if (method === "leetcode/leetbooks") return Promise.resolve({ categories: [{ id: 1, name: "算法", subcategories: [{ id: 2, name: "基础", bookIds: [7] }] }], books: [{ id: 7, slug: "stack-queue", title: "栈与队列", description: "数据结构专攻", totalStudied: 3 }] });
         if (method === "leetcode/open_site") return Promise.resolve({ ok: true });
         if (method === "leetcode/get_problem") return Promise.resolve({
           questionId: "7", frontendQuestionId: "7", title: "Reverse", titleCn: "整数反转", titleSlug: "slug-7",
@@ -86,14 +98,22 @@ window.__resolveReady();
 await settle(150);
 
 // ---------- layout
+check("workbench header carries the plugin icon", !!document.querySelector("header .brand-ico svg, header svg.brand-ico"), "no inline icon");
 check("left nav rendered", document.querySelectorAll("#nav .nav-item").length >= 6, `${document.querySelectorAll("#nav .nav-item").length}`);
 check("nav has 题目/收藏/每日一题", /题目/.test(text("#nav .label").join("/")) && /我的收藏/.test(text("#nav .label").join("/")) && /每日一题/.test(text("#nav .label").join("/")), text("#nav .label").join("/"));
-check("official sections present", /探险模式/.test(document.body.textContent) && /LeetBook/.test(document.body.textContent) && /学习计划/.test(document.body.textContent), "missing");
+check("official sections present", /探险模式/.test(document.body.textContent) && /学习计划/.test(document.body.textContent), document.body.textContent.slice(0, 80));
+check("LeetBook text absent from the nav", !/LeetBook/.test(document.querySelector("#nav").textContent), "still listed");
+check("nav shows labels by default (not collapsed)", !document.querySelector("#nav").classList.contains("collapsed") && /题目/.test(document.querySelector("#nav .nav-item[data-view=\"list\"] .label").textContent), "labels hidden");
+click("#navToggle");
+check("nav collapses on demand", document.querySelector("#nav").classList.contains("collapsed"), "did not collapse");
+click("#navToggle");
+check("nav expands back", !document.querySelector("#nav").classList.contains("collapsed"), "did not expand back");
 check("7 category tabs", document.querySelectorAll("#cats .cat").length === 7, `${document.querySelectorAll("#cats .cat").length}`);
 check("right rail companies rendered", document.querySelectorAll("#companies button").length === 12, `${document.querySelectorAll("#companies button").length}`);
 
 // ---------- header avatar
-check("avatar badge rendered (no remote image)", !!document.querySelector("#who .avatar") && !document.querySelector("#who img"), document.querySelector("#who")?.innerHTML);
+check("real avatar loaded through the sidecar", called("leetcode/avatar") && !!document.querySelector("#who img.avatar-img"), document.querySelector("#who")?.innerHTML);
+check("avatar is a data: URL, not a remote origin", String(document.querySelector("#who img.avatar-img")?.getAttribute("src") || "").startsWith("data:image/"), document.querySelector("#who img")?.getAttribute("src"));
 check("nickname shown", /测试者/.test(document.querySelector("#who").textContent), document.querySelector("#who").textContent);
 
 // ---------- tags: all 79 present, clipped by CSS, toggle outside the clip
@@ -127,6 +147,13 @@ click("#qbody .fav:not(.on)");
 await settle(120);
 check("star click calls toggle_favorite", called("leetcode/toggle_favorite"), "not called");
 check("star state flips in the UI", document.querySelectorAll("#qbody .fav.on").length === starCountBefore + 1, `${starCountBefore} -> ${document.querySelectorAll("#qbody .fav.on").length}`);
+favResult = { ok: false, error: "请先登录" };
+const after = document.querySelectorAll("#qbody .fav.on").length;
+click("#qbody .fav:not(.on)");
+await settle(150);
+check("a rejected favourite surfaces the reason", /请先登录/.test(document.querySelector("#listStatus").textContent), document.querySelector("#listStatus").textContent);
+check("a rejected favourite does not flip the star", document.querySelectorAll("#qbody .fav.on").length === after, `${after} -> ${document.querySelectorAll("#qbody .fav.on").length}`);
+favResult = { ok: true };
 
 // ---------- sort
 document.querySelector("#sortField").value = "AC_RATE";
@@ -145,8 +172,10 @@ check("status line mentions the active sort", /通过率升序|通过率降序/.
 // ---------- only favorites via nav
 click("#nav .nav-item", "我的收藏");
 await settle(200);
-check("我的收藏 filters to favorited rows", [...document.querySelectorAll("#qbody tr.q")].every((tr) => tr.querySelector(".fav.on")), "some rows unfavourited");
-check("status line shows 只看收藏", /只看收藏/.test(document.querySelector("#listStatus").textContent), document.querySelector("#listStatus").textContent);
+check("我的收藏 calls the favourites endpoint", called("leetcode/favorite_questions"), "not called");
+check("我的收藏 renders the collection rows", /字母异位词分组/.test(document.querySelector("#qbody").textContent), document.querySelector("#qbody").textContent.slice(0, 120));
+check("我的收藏 shows every row as starred", [...document.querySelectorAll("#qbody tr.q")].every((tr) => tr.querySelector(".fav.on")), "some rows unstarred");
+check("status line shows 我的收藏", /我的收藏/.test(document.querySelector("#listStatus").textContent), document.querySelector("#listStatus").textContent);
 click("#nav .nav-item", "题目");
 await settle(200);
 
@@ -163,9 +192,23 @@ await settle(120);
 click("#companies button", "字节跳动");
 await settle(120);
 check("company chip opens the official page via sidecar", calls.some(([m, p]) => m === "leetcode/open_site" && p.path === "/company/bytedance/"), "not called");
-click('#nav .nav-item.site[data-path="/explore/"]');
-await settle(120);
-check("探险模式 links out", calls.some(([m, p]) => m === "leetcode/open_site" && p.path === "/explore/"), "not called");
+click('#nav .nav-item[data-view="studyplan"]');
+await settle(400);
+check("学习计划 renders in-app via study_plans", called("leetcode/study_plans") && /热题 100/.test(document.querySelector("#sectionBody").textContent), document.querySelector("#sectionBody")?.textContent?.slice(0, 120));
+check("学习计划 hides the problem list", document.querySelector("#listView").classList.contains("hidden"), "list still visible");
+check("LeetBook entry is hidden", !document.querySelector('#nav .nav-item[data-view="leetbook"]'), "still present");
+check("探险模式 still offered", !!document.querySelector('#nav .nav-item[data-view="explore"]'), "missing");
+check("学习计划 still offered", !!document.querySelector('#nav .nav-item[data-view="studyplan"]'), "missing");
+click('#nav .nav-item[data-view="explore"]');
+await settle(300);
+check("探险模式 renders an in-app panel", !document.querySelector("#sectionView").classList.contains("hidden") && /探险模式/.test(document.querySelector("#sectionTitle").textContent), "no panel");
+const opensBefore = calls.filter(([m]) => m === "leetcode/open_site").length;
+click("#sectionBody button[data-open]");
+await settle(150);
+check("deep pages still open through the sidecar", calls.filter(([m]) => m === "leetcode/open_site").length === opensBefore + 1, "not called");
+click('#nav .nav-item[data-view="list"]');
+await settle(300);
+check("returning to 题目 restores the list", !document.querySelector("#listView").classList.contains("hidden"), "list not restored");
 
 // ---------- reset clears everything (also exits the "full set" sort mode)
 click("#resetBtn");

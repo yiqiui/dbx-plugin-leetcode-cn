@@ -1,7 +1,7 @@
 {
   "name": "dbx-plugin-leetcode-cn",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.3.10",
   "type": "module",
   "description": "Dev scripts for the LeetCode DBX plugin.",
   "scripts": {

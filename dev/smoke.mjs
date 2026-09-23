@@ -86,6 +86,13 @@ try {
   check("list_all returns the whole selection", (all.questions || []).length === all.total && all.total === 4, `len=${all.questions?.length} total=${all.total}`);
   check("list_all reports no truncation for a small set", all.truncated === false, JSON.stringify(all).slice(0, 120));
 
+  const catalogs = await call("leetcode/study_plans", { catalogSlug: "" });
+  check("study plan catalogs load", Array.isArray(catalogs.catalogs) && catalogs.catalogs.length > 0, JSON.stringify(catalogs).slice(0, 140));
+  if (catalogs.catalogs?.length) {
+    const plans = await call("leetcode/study_plans", { catalogSlug: catalogs.catalogs[0].slug, offset: 0, limit: 5 });
+    check("study plans by catalog load", Array.isArray(plans.studyPlans) && plans.studyPlans.length > 0, JSON.stringify(plans).slice(0, 140));
+    check("study plan carries name + question count", !!plans.studyPlans?.[0]?.name && Number.isInteger(plans.studyPlans?.[0]?.questionNum), JSON.stringify(plans.studyPlans?.[0] ?? null).slice(0, 140));
+  }
   try {
     await call("leetcode/open_site", { path: "https://example.com" });
     check("open_site rejects non-absolute paths", false, "it accepted an absolute URL");

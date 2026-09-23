@@ -71,13 +71,29 @@
       .fav { width: 34px; text-align: center; cursor: pointer; font-size: 14px; color: color-mix(in srgb, CanvasText 32%, transparent); }
       .fav:hover { color: var(--brand); }
       .fav.on { color: var(--brand); }
+      .brand-ico { width: 22px; height: 22px; border-radius: 6px; }
+      .avatar-img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border); }
       .avatar { width: 20px; height: 20px; border-radius: 50%; background: linear-gradient(135deg, #ffc84a, #f08c00); color: #3d2a00; font-size: 11px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 20px; }
       .who { display: inline-flex; align-items: center; gap: 6px; }
       .tags-wrap { display: flex; align-items: flex-start; gap: 8px; }
       .tags-scroll { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; }
       .tags-scroll.clip { max-height: 28px; overflow: hidden; }
       @media (max-width: 1080px) { #rail { display: none; } }
-      @media (max-width: 820px) { #nav { width: 46px; flex-basis: 46px; } #nav .label, #nav .nav-group { display: none; } #nav .nav-item { justify-content: center; } }
+      /* 导航折叠由用户控制，不再按宽度强制收成图标（否则标签永远看不到） */
+      #nav.collapsed { width: 46px; flex-basis: 46px; }
+      #nav.collapsed .label, #nav.collapsed .nav-group { display: none; }
+      #nav.collapsed .nav-item { justify-content: center; }
+      #nav.collapsed #navToggle .ico { transform: rotate(180deg); }
+      #sectionView { flex: 1; min-width: 0; overflow: auto; padding: 14px 16px; }
+      #sectionView h2 { margin: 0 0 4px; font-size: 17px; }
+      #sectionView .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+      .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+      .cardx { border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 6px; background: color-mix(in srgb, CanvasText 3%, transparent); }
+      .cardx .t { font-weight: 650; }
+      .cardx .d { font-size: 12px; color: var(--muted); line-height: 1.5; }
+      .cardx .meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+      .cardx button { align-self: flex-start; margin-top: 4px; }
+      .group { margin: 16px 0 8px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
       table { width: 100%; border-collapse: collapse; }
       th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
       th { color: var(--muted); font-weight: 600; position: sticky; top: 0; background: Canvas; }
@@ -129,6 +145,7 @@
     </div>
 
     <header>
+      <svg class="brand-ico" viewBox="0 0 48 48" aria-hidden="true"><defs><linearGradient id="bic" x1="6" y1="4" x2="42" y2="44" gradientUnits="userSpaceOnUse"><stop stop-color="#ffc84a"/><stop offset=".55" stop-color="#ffb100"/><stop offset="1" stop-color="#f08c00"/></linearGradient></defs><rect width="48" height="48" rx="11" fill="url(#bic)"/><g fill="none" stroke="#3d2a00" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 14.5 7 24l7.5 9.5"/><path d="M25 14.5 32.5 24 25 33.5"/></g><circle cx="36" cy="33" r="8.5" fill="#1f7a3d"/><path d="M32.1 33.1l2.9 2.9 5-5.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <span class="brand">LeetCode 刷题</span>
       <div class="spacer"></div>
       <span class="who" id="who"></span>
@@ -138,13 +155,13 @@
 
     <main>
       <aside id="nav" aria-label="板块导航">
+        <button type="button" class="nav-item" id="navToggle" title="展开 / 收起导航"><span class="ico">«</span><span class="label">收起导航</span></button>
         <button type="button" class="nav-item" data-view="list" data-slug="" aria-current="page"><span class="ico">▤</span><span class="label">题目</span></button>
         <button type="button" class="nav-item" data-view="favs"><span class="ico">★</span><span class="label">我的收藏</span></button>
         <button type="button" class="nav-item" data-view="daily"><span class="ico">◉</span><span class="label">每日一题</span></button>
         <div class="nav-group">官网板块</div>
-        <button type="button" class="nav-item site" data-path="/explore/"><span class="ico">🧭</span><span class="label">探险模式</span></button>
-        <button type="button" class="nav-item site" data-path="/leetbook/"><span class="ico">📘</span><span class="label">LeetBook</span></button>
-        <button type="button" class="nav-item site" data-path="/studyplan/"><span class="ico">🎓</span><span class="label">学习计划</span></button>
+        <button type="button" class="nav-item" data-view="explore"><span class="ico">🧭</span><span class="label">探险模式</span></button>
+        <button type="button" class="nav-item" data-view="studyplan"><span class="ico">🎓</span><span class="label">学习计划</span></button>
       </aside>
       <section id="listView">
         <nav class="cats" id="cats" role="tablist" aria-label="题目分类"></nav>
@@ -202,6 +219,12 @@
         </div>
       </section>
 
+      <section id="sectionView" class="hidden">
+        <h2 id="sectionTitle"></h2>
+        <div class="sub" id="sectionSub"></div>
+        <div id="sectionBody"></div>
+      </section>
+
       <section id="solveView" class="hidden">
         <div class="solve-bar">
           <button id="backBtn" type="button">← 返回题库</button>
@@ -232,7 +255,7 @@
       const $ = (sel) => document.querySelector(sel);
       const state = { questions: [], page: 1, pageSize: 30, total: 0, activeSlug: null, snippets: [], loading: false,
                       categorySlug: "", tags: [], allTags: [], tagsExpanded: false, searching: false,
-                      sortField: "", sortDesc: false, onlyFavs: false, fullSet: null, fullSetKey: "", me: null };
+                      sortField: "", sortDesc: false, mode: "list", fullSet: null, fullSetKey: "", me: null, section: null };
       // The official problemset tabs. Slugs are what the site's GraphQL
       // `categorySlug` argument expects (note the singular `database`).
       const CATS = [
@@ -273,9 +296,9 @@
       // Rows in scope: the server page (default order) or the whole filtered set
       // (when a local sort or 只看收藏 is active, so ordering is not page-local).
       function computeRows() {
+        // 我的收藏 comes back pre-filtered from the favourites API.
         let rows = state.questions.slice();
-        if (state.onlyFavs) rows = rows.filter((q) => q.isFavor);
-        if (state.sortField) {
+        if (state.sortField && state.mode !== "favs") {
           const keys = {
             FRONTEND_ID: (q) => num(q.frontendQuestionId),
             DIFFICULTY: (q) => ({ EASY: 1, MEDIUM: 2, HARD: 3 }[String(q.difficulty || "").toUpperCase()] || 0),
@@ -327,9 +350,14 @@
         const row = (state.pageRows || []).find((q) => q.titleSlug === slug);
         const next = !(row && row.isFavor);
         try {
-          await call("leetcode/toggle_favorite", { titleSlug: slug, favorite: next }, 20000);
+          const res = await call("leetcode/toggle_favorite", { titleSlug: slug, favorite: next }, 25000);
+          // The site answers { ok, error }; treat a falsy ok as a failure so the
+          // star never lies about the collection's real state.
+          if (res && res.ok === false) {
+            $("#listStatus").textContent = "收藏失败：" + (res.error || "力扣拒绝了该操作");
+            return;
+          }
           if (row) row.isFavor = next;
-          // Reflect the change in the full set too, so sorting/paging stays right.
           const hit = state.questions.find((q) => q.titleSlug === slug);
           if (hit) hit.isFavor = next;
           renderList();
@@ -342,14 +370,14 @@
         // Paging is local whenever a sort or 只看收藏 is applied, because the
         // ordering/ filtering spans the whole set rather than one server page.
         const scoped = computeRows().length;
-        const shown = state.sortField || state.onlyFavs ? scoped : (state.total || scoped);
+        const shown = state.sortField ? scoped : (state.total || scoped);
         const totalPages = Math.max(1, Math.ceil(shown / state.pageSize));
         if (state.page > totalPages) { state.page = totalPages; }
         $("#pager").classList.toggle("hidden", !shown);
         $("#pageInput").value = state.page;
         $("#pageInput").max = totalPages;
         $("#pageInfo").textContent = `/ ${totalPages} 页`;
-        $("#totalInfo").textContent = state.onlyFavs ? `收藏 ${scoped} 题` : `共 ${shown} 题`;
+        $("#totalInfo").textContent = `共 ${shown} 题`;
         $("#prevBtn").disabled = state.page <= 1;
         $("#nextBtn").disabled = state.page >= totalPages;
       }
@@ -413,7 +441,7 @@
           return hit ? (hit.translatedName || hit.name || slug) : slug;
         }).join("、"));
         if (state.searching) parts.push(`搜索「${$("#search").value.trim()}」`);
-        if (state.onlyFavs) parts.push("只看收藏");
+        if (state.mode === "favs") parts.push("我的收藏");
         if (state.sortField) {
           const label = { FRONTEND_ID: "题号", DIFFICULTY: "难度", AC_RATE: "通过率", FREQUENCY: "出题频率", CONTEST_POINT: "竞赛分" }[state.sortField];
           parts.push(`按${label}${state.sortDesc ? "降序" : "升序"}`);
@@ -429,12 +457,22 @@
         state.loading = true;
         if (reset) { state.page = 1; }
         const key = filterKey();
-        const needFull = !!(state.sortField || state.onlyFavs);
+        const needFull = !!state.sortField;
         $("#listStatus").textContent = needFull && state.fullSetKey !== key ? "载入完整筛选结果以排序…" : "加载中…";
         try {
           const keyword = $("#search").value.trim();
           const filters = currentFilters();
-          if (needFull) {
+          if (state.mode === "favs") {
+            // The favourites collection is its own endpoint, so the list is
+            // already filtered and paged server-side.
+            const fav = await call("leetcode/favorite_questions", { favoriteSlug: "", skip: (state.page - 1) * state.pageSize, limit: state.pageSize }, 60000);
+            state.questions = (fav.questions || []).map((q) => ({
+              frontendQuestionId: q.questionFrontendId, title: q.title, titleCn: q.translatedTitle, titleSlug: q.titleSlug,
+              difficulty: q.difficulty, acRate: q.acRate, status: q.status, paidOnly: q.paidOnly, isFavor: true,
+              topicTags: q.topicTags || [],
+            }));
+            state.total = fav.totalLength || state.questions.length;
+          } else if (needFull) {
             // Sorting/favouriting must span the whole selection, so pull the
             // filtered set once (cached per filter combination) and work locally.
             if (state.fullSetKey !== key || !state.fullSet) {
@@ -458,8 +496,8 @@
           const start = (state.page - 1) * state.pageSize;
           const from = rows.length ? start + 1 : 0;
           const to = Math.min(start + state.pageSize, rows.length);
-          $("#listStatus").textContent = `${activeFilterSummary()} · 共 ${state.sortField || state.onlyFavs ? rows.length : state.total} 题，显示 ${from}-${to}`
-            + (state.fullTruncated && (state.sortField || state.onlyFavs) ? "（仅在前 1500 题内排序）" : "");
+          $("#listStatus").textContent = `${activeFilterSummary()} · 共 ${state.sortField ? rows.length : state.total} 题，显示 ${from}-${to}`
+            + (state.fullTruncated && state.sortField ? "（仅在前 1500 题内排序）" : "");
           renderList();
         } catch (e) {
           if (mine === requestSeq) $("#listStatus").textContent = "加载失败：" + e.message;
@@ -731,7 +769,7 @@
       $("#resetBtn").addEventListener("click", () => {
         $("#search").value = ""; $("#difficulty").value = ""; $("#status").value = "";
         state.tags = []; state.categorySlug = ""; state.searching = false; state.tagsExpanded = false;
-        state.sortField = ""; state.sortDesc = false; state.onlyFavs = false;
+        state.sortField = ""; state.sortDesc = false; state.mode = "list";
         $("#sortField").value = ""; $("#sortDir").textContent = "↑";
         renderCats(); renderTags(); loadProblems(true);
       });
@@ -764,20 +802,88 @@
         }
       });
 
-      function switchView(view) {
+      function showListOnly() {
+        $("#solveView").classList.add("hidden");
+        $("#sectionView").classList.add("hidden");
+        $("#listView").classList.remove("hidden");
+      }
+      function showSection(title, sub) {
+        $("#listView").classList.add("hidden");
+        $("#solveView").classList.add("hidden");
+        $("#sectionView").classList.remove("hidden");
+        $("#sectionTitle").textContent = title;
+        $("#sectionSub").textContent = sub || "";
+      }
+
+      async function switchView(view) {
         document.querySelectorAll("#nav .nav-item[data-view]").forEach((btn) => {
           btn.setAttribute("aria-current", btn.dataset.view === view ? "page" : "false");
         });
-        state.onlyFavs = view === "favs";
-        showList();
-        if (view === "daily") { openDaily(); return; }
+        if (view === "daily") { showListOnly(); openDaily(); return; }
+        if (view === "explore" || view === "studyplan") { state.section = view; return renderSection(view); }
+        state.mode = view === "favs" ? "favs" : "list";
+        showListOnly();
         loadProblems(true);
       }
+
+      // 板块内容在插件内渲染；只有题单/书本这类深层页面才交给系统浏览器。
+      async function renderSection(view) {
+        showSection(view === "leetbook" ? "LeetBook" : view === "studyplan" ? "学习计划" : "探险模式", "加载中…");
+        const body = $("#sectionBody");
+        try {
+          if (view === "studyplan") {
+            const catalogs = await call("leetcode/study_plans", { catalogSlug: "" }, 30000);
+            const list = catalogs.catalogs || [];
+            $("#sectionSub").textContent = `共 ${list.length} 个分类`;
+            let html = "";
+            for (const catalog of list) {
+              const plans = await call("leetcode/study_plans", { catalogSlug: catalog.slug, offset: 0, limit: 30 }, 30000);
+              const cards = (plans.studyPlans || []).map((plan) => `
+                <div class="cardx">
+                  <div class="t">${esc(plan.name)}</div>
+                  <div class="d">${esc(plan.highlight || "")}</div>
+                  <div class="meta"><span>${plan.questionNum || 0} 题</span>${plan.premiumOnly ? '<span class="pill">Plus</span>' : ""}</div>
+                  <button type="button" data-open="/studyplan/${esc(plan.slug)}/">打开题单</button>
+                </div>`).join("");
+              html += `<div class="group">${esc(catalog.name)}（${(plans.studyPlans || []).length}${plans.total ? " / " + plans.total : ""}）</div><div class="cards">${cards || '<span class="muted">该分类暂无题单</span>'}</div>`;
+            }
+            body.innerHTML = html || '<span class="muted">没有可显示的学习计划</span>';
+          } else if (view === "leetbook") {
+            const data = await call("leetcode/leetbooks", {}, 40000);
+            const books = data.books || [];
+            $("#sectionSub").textContent = `${(data.categories || []).length} 个分类 · ${books.length} 本书`;
+            body.innerHTML = `<div class="cards">${books.map((book) => `
+              <div class="cardx">
+                <div class="t">${esc(book.title)}</div>
+                <div class="d">${esc((book.description || "").slice(0, 90))}</div>
+                <div class="meta"><span>已学 ${book.totalStudied || 0}</span></div>
+                <button type="button" data-open="/leetbook/${esc(book.slug)}/">开始阅读</button>
+              </div>`).join("") || '<span class="muted">没有可显示的 LeetBook</span>'}</div>`;
+          } else {
+            // 探险模式没有可公开调用的列表接口（内容按会话下发），给出明确说明而不是空白页。
+            $("#sectionSub").textContent = "探险模式的关卡由力扣按会话下发，插件暂无稳定的列表接口，点击可在浏览器中查看。";
+            body.innerHTML = `<div class="cards">
+              <div class="cardx"><div class="t">数据结构与算法</div><div class="d">35 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
+              <div class="cardx"><div class="t">数据库</div><div class="d">5 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
+              <div class="cardx"><div class="t">系统与软件设计</div><div class="d">5 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
+              <div class="cardx"><div class="t">数学</div><div class="d">7 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
+            </div>`;
+          }
+          body.querySelectorAll("button[data-open]").forEach((btn) => btn.addEventListener("click", async () => {
+            try { await call("leetcode/open_site", { path: btn.dataset.open }, 15000); }
+            catch (e) { $("#sectionSub").textContent = "打开失败：" + e.message; }
+          }));
+        } catch (e) {
+          $("#sectionSub").textContent = "加载失败：" + e.message;
+          body.innerHTML = "";
+        }
+      }
+
       document.querySelectorAll("#nav .nav-item[data-view]").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
-      document.querySelectorAll("#nav .nav-item.site").forEach((btn) => btn.addEventListener("click", async () => {
-        try { await call("leetcode/open_site", { path: btn.dataset.path }, 15000); }
-        catch (e) { $("#listStatus").textContent = "打开官网失败：" + e.message; }
-      }));
+      $("#navToggle").addEventListener("click", () => {
+        const collapsed = $("#nav").classList.toggle("collapsed");
+        $("#navToggle .ico").textContent = collapsed ? "»" : "«";
+      });
 
       function renderCompanies() {
         $("#companies").innerHTML = COMPANIES.map(([name, path]) => `<button type="button" data-path="${esc(path)}">${esc(name)}</button>`).join("");
@@ -813,7 +919,19 @@
         const name = status.nickname || status.username || "";
         // 沙箱 CSP 不允许加载站外图片，所以头像用首字母圆形徽章，而不是 <img src>。
         const initial = esc((name || "?").slice(0, 1).toUpperCase());
-        who.innerHTML = `<span class="avatar" title="力扣头像需联网，插件沙箱内以首字母代替">${initial}</span> 已登录：${esc(name)}${status.username && status.nickname ? `（${esc(status.username)}）` : ""}`;
+        who.innerHTML = `<span class="avatar" id="meAvatar" title="力扣头像">${initial}</span> 已登录：${esc(name)}${status.username && status.nickname ? `（${esc(status.username)}）` : ""}`;
+        // The sandbox CSP allows `img-src data:`, so the sidecar relays the real
+        // avatar bytes; a letter badge remains as the fallback.
+        call("leetcode/avatar", {}, 25000).then((res) => {
+          if (!res || !res.avatar) return;
+          const holder = document.getElementById("meAvatar");
+          if (!holder) return;
+          const img = document.createElement("img");
+          img.className = "avatar-img";
+          img.src = res.avatar;
+          img.alt = name;
+          holder.replaceWith(img);
+        }).catch(() => {});
       }
 
       function totalPages() { return Math.max(1, Math.ceil((state.total || 0) / state.pageSize)); }

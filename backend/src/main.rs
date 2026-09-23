@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::sync::Mutex;
 
 use aes_gcm::aead::{Aead, KeyInit, Payload};
@@ -31,6 +32,72 @@ const DAILY_QUERY: &str = r#"query todayRecord {
     }
   }
 }"#;
+
+// 收藏相关文档逐字取自 leetcode.cn 前端 bundle，避免再靠猜接口名。
+const FAV_ADD_MUTATION: &str = r#"mutation addQuestionToDefaultFavoriteV2($questionSlug: String!) {
+  addQuestionToDefaultFavoriteV2(questionSlug: $questionSlug) { ok error }
+}"#;
+
+const FAV_REMOVE_MUTATION: &str = r#"mutation removeQuestionFromFavoriteV2($favoriteSlug: String!, $questionSlug: String!) {
+  removeQuestionFromFavoriteV2(favoriteSlug: $favoriteSlug, questionSlug: $questionSlug) { ok error }
+}"#;
+
+const MY_FAVORITE_LISTS_QUERY: &str = r#"query myCreatedFavoriteList($currentQuestionSlug: String) {
+  myCreatedFavoriteList(currentQuestionSlug: $currentQuestionSlug) {
+    favorites { slug name hasCurrentQuestion isPublicFavorite }
+  }
+}"#;
+
+const FAV_QUESTIONS_QUERY: &str = r#"query favoriteQuestionList($favoriteSlug: String!, $limit: Int, $skip: Int) {
+  favoriteQuestionList(favoriteSlug: $favoriteSlug, limit: $limit, skip: $skip, version: "v2") {
+    questions {
+      difficulty id paidOnly questionFrontendId status title titleSlug translatedTitle
+      isInMyFavorites frequency acRate contestPoint
+      topicTags { name nameTranslated slug }
+    }
+    totalLength
+    hasMore
+  }
+}"#;
+
+/// Fallback collection slug when the account exposes no list to read from.
+const DEFAULT_FAVORITE_SLUG: &str = "favorite-mine";
+
+// 学习计划 / LeetBook 的文档同样逐字取自 leetcode.cn 前端 bundle。
+const STUDY_PLAN_CATALOGS_QUERY: &str = r#"query GetStudyPlanCatalogs {
+  studyPlanV2Catalogs { name slug recommendedStudyPlans }
+}"#;
+
+const STUDY_PLANS_QUERY: &str = r#"query GetStudyPlanByCatalog($catalogSlug: String!, $offset: Int!, $limit: Int!) {
+  studyPlansV2ByCatalog(catalogSlug: $catalogSlug, offset: $offset, limit: $limit) {
+    hasMore
+    total
+    studyPlans { slug name questionNum premiumOnly onGoing highlight cover }
+  }
+}"#;
+
+const LEETBOOK_CATEGORIES_QUERY: &str = r#"query leetbookCategories {
+  leetbookCategories { id name subcategories { id name bookIds } }
+}"#;
+
+const LEETBOOKS_BY_IDS_QUERY: &str = r#"query leetbooksByIds($ids: [Int!]) {
+  leetbooksByIds(bookIds: $ids) { id slug title coverImg description totalStudied }
+}"#;
+
+/// The site's mutations answer `{ ok error }`; turn a falsy `ok` into a real
+/// error so the UI can show *why* instead of assuming success.
+fn result_or_error(value: Option<&Value>) -> Value {
+    match value {
+        Some(found) if found.get("ok").and_then(Value::as_bool).unwrap_or(false) => found.clone(),
+        Some(found) => json!({
+            "ok": false,
+            "error": found.get("error").cloned()
+                .filter(|v| !v.is_null())
+                .unwrap_or_else(|| Value::String("力扣拒绝了该操作".to_string())),
+        }),
+        None => json!({ "ok": false, "error": "力扣返回了无法识别的响应" }),
+    }
+}
 
 /// Server-side keyword search. The public V1 list has no search field, and the
 /// V2 endpoint is login-gated, so this runs with the session cookies and the
@@ -800,6 +867,102 @@ impl LeetCodePlugin {
         Ok(json!({ "total": total, "questions": questions, "truncated": truncated }))
     }
 
+    /// 学习计划的目录（分类）与分类下的题单。`catalog_slug` 为空时返回分类本身。
+    fn study_plans(&self, catalog_slug: &str, offset: i64, limit: i64) -> Result<Value, PluginError> {
+        if catalog_slug.trim().is_empty() {
+            let data = self.graphql(STUDY_PLAN_CATALOGS_QUERY, json!({}))?;
+            return Ok(json!({ "catalogs": data.get("studyPlanV2Catalogs").cloned().unwrap_or_else(|| Value::Array(vec![])) }));
+        }
+        let data = self.graphql(
+            STUDY_PLANS_QUERY,
+            json!({ "catalogSlug": catalog_slug, "offset": offset, "limit": limit }),
+        )?;
+        Ok(data.get("studyPlansV2ByCatalog").cloned().unwrap_or_else(|| json!({ "studyPlans": [], "total": 0 })))
+    }
+
+    /// LeetBook 分类及其下的书：先取分类树，再用其中的 bookIds 批量取书名/封面。
+    fn leetbooks(&self) -> Result<Value, PluginError> {
+        let data = self.graphql(LEETBOOK_CATEGORIES_QUERY, json!({}))?;
+        let categories = data.get("leetbookCategories").cloned().unwrap_or_else(|| Value::Array(vec![]));
+        let mut ids: Vec<i64> = Vec::new();
+        if let Some(list) = categories.as_array() {
+            for category in list {
+                if let Some(subs) = category.get("subcategories").and_then(Value::as_array) {
+                    for sub in subs {
+                        // The API answers `bookIds` as a JSON-encoded *string*
+                        // ("[232, 238, …]"), not a list; accept both shapes.
+                        let parsed = match sub.get("bookIds") {
+                            Some(Value::Array(values)) => values.clone(),
+                            Some(Value::String(text)) => serde_json::from_str::<Value>(text)
+                                .ok()
+                                .and_then(|value| value.as_array().cloned())
+                                .unwrap_or_default(),
+                            _ => Vec::new(),
+                        };
+                        for id in parsed {
+                            if let Some(number) = id.as_i64() {
+                                if !ids.contains(&number) {
+                                    ids.push(number);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut books = Vec::new();
+        if !ids.is_empty() {
+            // Chunked so a large catalogue cannot exceed the request size limit.
+            for chunk in ids.chunks(60) {
+                let detail = self.graphql(LEETBOOKS_BY_IDS_QUERY, json!({ "ids": chunk }))?;
+                if let Some(list) = detail.get("leetbooksByIds").and_then(Value::as_array) {
+                    books.extend(list.iter().cloned());
+                }
+            }
+        }
+        Ok(json!({ "categories": categories, "books": books }))
+    }
+
+    /// Fetch the signed-in user's avatar as a `data:` URL. The workbench sandbox
+    /// blocks remote image origins but its CSP allows `img-src data:`, so the
+    /// bytes are relayed through the sidecar instead of pointing the iframe at
+    /// the CDN.
+    fn avatar_data_url(&self) -> Result<Value, PluginError> {
+        let _ = self.current_username();
+        let raw = self.session.lock().map(|s| s.avatar.clone()).unwrap_or_default();
+        let url = raw.trim().to_string();
+        if url.is_empty() {
+            return Ok(json!({ "avatar": Value::Null }));
+        }
+        let url = if let Some(rest) = url.strip_prefix("//") {
+            format!("https://{rest}")
+        } else if url.starts_with('/') {
+            format!("{BASE}{url}")
+        } else {
+            url
+        };
+        let response = remote_agent()
+            .get(&url)
+            .call()
+            .map_err(|e| err(format!("头像下载失败：{e}")))?;
+        let content_type = response
+            .header("content-type")
+            .map(|value| value.split(';').next().unwrap_or("image/png").to_string())
+            .unwrap_or_else(|| "image/png".to_string());
+        let mut bytes = Vec::new();
+        response
+            .into_reader()
+            .take(512 * 1024)
+            .read_to_end(&mut bytes)
+            .map_err(|e| err(format!("头像读取失败：{e}")))?;
+        if bytes.is_empty() || !content_type.starts_with("image/") {
+            return Ok(json!({ "avatar": Value::Null }));
+        }
+        Ok(json!({
+            "avatar": format!("data:{};base64,{}", content_type, base64::engine::general_purpose::STANDARD.encode(&bytes)),
+        }))
+    }
+
     fn get_problem(&self, title_slug: &str) -> Result<Value, PluginError> {
         let data = self.graphql(DETAIL_QUERY, json!({ "titleSlug": title_slug }))?;
         let q = data.get("question").cloned().ok_or_else(|| err("question not found"))?;
@@ -829,25 +992,63 @@ impl LeetCodePlugin {
 
     /// Toggle a question's favorite state. NOTE: login-gated, endpoint/field names are best-effort
     /// and NOT verified against the live site (requires a signed-in session).
+    /// Star a question. Documents are copied verbatim from leetcode.cn's own
+    /// frontend bundle (operation names + `{ ok error }` payload), because the
+    /// earlier REST guess returned an HTML page. Removal is per-list, so the
+    /// list slug is resolved first instead of being hardcoded.
     fn toggle_favorite(&self, title_slug: &str, favorite: bool) -> Result<Value, PluginError> {
-        let (_status, body) = self.request_json(
-            "POST",
-            &format!("{BASE}/problems/{title_slug}/favorite/"),
-            Some(json!({ "favorite": favorite })),
-            None,
-            true,
+        if favorite {
+            let data = self.graphql(FAV_ADD_MUTATION, json!({ "questionSlug": title_slug }))?;
+            return Ok(result_or_error(data.get("addQuestionToDefaultFavoriteV2")));
+        }
+        let slug = self.favorite_slug_for(title_slug)?;
+        let data = self.graphql(
+            FAV_REMOVE_MUTATION,
+            json!({ "favoriteSlug": slug, "questionSlug": title_slug }),
         )?;
-        Ok(body)
+        Ok(result_or_error(data.get("removeQuestionFromFavoriteV2")))
     }
 
-    /// List the signed-in user's favorite lists. NOTE: favorite-list GraphQL field names could not
-    /// be validated against leetcode.cn (introspection disabled); left best-effort and unverified.
+    /// Find a favourite list that actually contains this question, preferring an
+    /// explicit match over the first list, then the site's default collection.
+    fn favorite_slug_for(&self, title_slug: &str) -> Result<String, PluginError> {
+        let data = self.graphql(MY_FAVORITE_LISTS_QUERY, json!({ "currentQuestionSlug": title_slug }))?;
+        let favorites = data
+            .pointer("/myCreatedFavoriteList/favorites")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        for favorite in &favorites {
+            if favorite.get("hasCurrentQuestion").and_then(Value::as_bool).unwrap_or(false) {
+                if let Some(slug) = favorite.get("slug").and_then(Value::as_str) {
+                    return Ok(slug.to_string());
+                }
+            }
+        }
+        if let Some(slug) = favorites.first().and_then(|f| f.get("slug")).and_then(Value::as_str) {
+            return Ok(slug.to_string());
+        }
+        Ok(DEFAULT_FAVORITE_SLUG.to_string())
+    }
+
+    /// The user's own favourite collections.
     fn my_favorites(&self) -> Result<Value, PluginError> {
+        let data = self.graphql(MY_FAVORITE_LISTS_QUERY, json!({ "currentQuestionSlug": Value::Null }))?;
+        Ok(data.get("myCreatedFavoriteList").cloned().unwrap_or(Value::Null))
+    }
+
+    /// Questions inside one favourite collection.
+    fn favorite_questions(&self, favorite_slug: &str, skip: i64, limit: i64) -> Result<Value, PluginError> {
+        let slug = if favorite_slug.trim().is_empty() {
+            self.favorite_slug_for("").unwrap_or_else(|_| DEFAULT_FAVORITE_SLUG.to_string())
+        } else {
+            favorite_slug.to_string()
+        };
         let data = self.graphql(
-            "query { favQuestionList: userFavouriteQuestionList { id name } }",
-            json!({}),
+            FAV_QUESTIONS_QUERY,
+            json!({ "favoriteSlug": slug, "skip": skip, "limit": limit }),
         )?;
-        Ok(data)
+        Ok(data.get("favoriteQuestionList").cloned().unwrap_or_else(|| json!({ "questions": [], "totalLength": 0 })))
     }
 
     /// Submission history for a question. Field names validated against leetcode.cn's schema
@@ -1240,9 +1441,22 @@ impl PluginHandler for LeetCodePlugin {
                 self.list_problems(skip, limit, filters, category_slug, search_keyword)
             }
             "leetcode/topic_tags" => self.topic_tags(),
+            "leetcode/study_plans" => {
+                let slug = get_str("catalogSlug");
+                let offset = params.get("offset").and_then(Value::as_i64).unwrap_or(0);
+                let limit = params.get("limit").and_then(Value::as_i64).unwrap_or(50);
+                self.study_plans(&slug, offset, limit)
+            }
+            "leetcode/leetbooks" => self.leetbooks(),
+            "leetcode/avatar" => self.avatar_data_url(),
             "leetcode/get_problem" => self.get_problem(&get_str("titleSlug")),
             "leetcode/toggle_favorite" => self.toggle_favorite(&get_str("titleSlug"), params.get("favorite").and_then(Value::as_bool).unwrap_or(true)),
             "leetcode/my_favorites" => self.my_favorites(),
+            "leetcode/favorite_questions" => {
+                let skip = params.get("skip").and_then(Value::as_i64).unwrap_or(0);
+                let limit = params.get("limit").and_then(Value::as_i64).unwrap_or(50);
+                self.favorite_questions(&get_str("favoriteSlug"), skip, limit)
+            }
             "leetcode/submission_list" => self.submission_list(&get_str("titleSlug")),
             "leetcode/run_code" => {
                 let inputs = params.get("inputs").and_then(Value::as_str).unwrap_or("").to_string();

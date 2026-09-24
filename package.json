@@ -1,12 +1,13 @@
 {
   "name": "dbx-plugin-leetcode-cn",
   "private": true,
-  "version": "0.3.10",
+  "version": "0.3.11",
   "type": "module",
   "description": "Dev scripts for the LeetCode DBX plugin.",
   "scripts": {
     "test:ui": "node dev/ui.test.mjs",
-    "test:smoke": "node dev/smoke.mjs"
+    "test:smoke": "node dev/smoke.mjs",
+    "test:format": "node dev/format.test.mjs"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"

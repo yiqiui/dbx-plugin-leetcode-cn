@@ -2,7 +2,7 @@
 
 在 DBX 插件中心里登录力扣（leetcode.cn）、浏览题库、查看题面、选择语言编写代码并运行 / 提交判题的工作台插件。
 
-当前版本 **0.3.10**。已在本机 DBX 上跑通：登录（含真实头像）→ 分类 / 标签 / 难度 / 作答状态筛选 → 排序 → 随机一题 → 收藏与我的收藏 → 每日一题 → 学习计划 → 做题 → 运行 / 提交。
+当前版本 **0.3.11**。已在本机 DBX 上跑通：登录（含真实头像）→ 分类 / 标签 / 难度 / 作答状态筛选 → 排序 → 随机一题 → 收藏与我的收藏 → 每日一题 → 学习计划 → 做题 → 运行 / 提交判题（含结果卡片与提交历史表格）→ 格式化（JavaScript / TypeScript）。
 
 ## 功能
 
@@ -20,7 +20,8 @@
 - **登录态显示**：顶部展示当前昵称、用户名与**力扣真实头像**（由 sidecar 取回字节转 data URL，失败时回退首字母徽章）。
 - **做题页**：点击题目进入独立做题视图，左侧题面、右侧代码编辑器，中间分隔线可**左右拖动**调整宽度，支持**全屏 / 退出全屏**。
 - **代码编辑器**：按语言自动**语法高亮**（关键字 / 字符串 / 注释 / 数字），带**行号**、Tab 缩进、回车智能缩进；语言下拉来自题面 `codeSnippets`。
-- **运行 / 提交判题**：展示状态、用时、内存、输出、编译错误。
+- **运行 / 提交判题**：与官网同款的判定卡片（状态 + 执行用时 / 内存消耗 / 通过用例 + 输入 / 输出 / 预期结果，编译与运行错误单独成块）；提交历史是官网那张表（# / 状态 / 语言 / 执行用时 / 消耗内存 / 备注，中文状态 + 相对时间）。
+- **格式化**：工具栏「格式化」按钮，JavaScript 走 prettier 的 babel 解析器、TypeScript 走 typescript 解析器；其余语言只做行尾空白与换行规范化并给出提示（见「已知限制」）。
 - **会员题兜底**：付费 / 会员题目（接口返回 `isPaidOnly` 或内容为空）会给出明确提示并提供「重试」，不再空白页。
 - 收藏、提交历史（需登录）。
 
@@ -65,6 +66,15 @@ DBX 插件只有 `host.workbench` / `host.binary` / `host.network` 三种能力�
 | `leetcode/submit_code` | `{ titleSlug, lang, code }` | `submit` 提交判题 |
 | `leetcode/toggle_favorite` / `leetcode/my_favorites` | `{ titleSlug, favorite }` / — | 收藏（需登录） |
 | `leetcode/submission_list` | `{ titleSlug }` | 提交历史（需登录） |
+
+### 判题接口契约（0.3.11 校正）
+
+两处都从站点自己的编辑器 bundle（`chunks/pages/problems/[slug]`）核对，不是猜测：
+
+- 请求体是 **JSON**，代码字段必须叫 **`typed_code`**；发 `codedetail` 会被回 `{"error":"解答提交 POST 数据丢失，请刷新此页面。"}`。运行带 `data_input`，提交不带（它跑全量用例），提交另带可为 `null` 的 `study_plan_slug` / `favorite_slug`。
+- 结果轮询：运行 `/submissions/detail/<id>/check/`，提交 `/submissions/detail/<id>/v2/check/`。
+- `state` 只有 `PENDING / SUCCESS / FAILURE / REVOKED`（**没有** `Finished`）；输出在 `std_output`（运行还有 `std_output_list`），另有 `compare_result`、`total_correct`、`total_testcases`、`last_testcase`、`full_compile_error`、`full_runtime_error`。
+- `submissionList` 的 `offset` 与 `limit` 都是非空参数，漏 `offset` 服务端只回「发生未知错误，请联系管理员」。
 
 ## 构建与本地运行
 
@@ -117,6 +127,8 @@ node dev/ui.test.mjs      # DOM 级交互回归：导航折叠、页签、标签
 - **头像经 sidecar 中转**：工作台 CSP 允许 `img-src data:` 但禁止站外图片源，因此由 sidecar 取回头像字节、以 data URL 交给界面渲染；取不到时回退为首字母徽章。
 - **LeetBook 入口已隐藏**：其书列表接口对匿名会话不可用（`leetbooksByIds` 在 Query 上不存在），登录后是否可用尚未实测；恢复前需先确认接口。
 - **企业题库与题单/书本的深层页面跳系统浏览器**：这些页面没有稳定的公开列表接口，插件内复刻不可靠。
+- **格式化只覆盖 JavaScript / TypeScript**：prettier 没有 Go / Python / Java / C++ / Rust 等语言的解析器，这些语言点「格式化」只做行尾空白与换行规范化——刻意不按括号深度重排，因为 Python 这类缩进敏感语言一旦重排就会改坏代码。要 Go 的官方格式需另接本机 `gofmt`。prettier 的 standalone 与 babel / typescript 解析器由 `dev/inline-prettier.mjs` 内联进 `ui/index.html`（官方打包流程不装项目依赖，且沙箱不放行同源脚本外链，所以只能内联提交），代价是包体积 +约 390 KB。
+- **没有「击败 xx%」**：官网那个百分比来自单独的分布接口，判题响应里没有对应字段，不做估算。
 - 登录必须在插件另开的**受控浏览器窗口**里完成一次（该窗口用独立临时配置，不带平时浏览器的登录态）；这是 DBX 无内嵌浏览器 + 力扣极验风控下的可行折中。
 - 插件窗口的「全屏」指铺满插件所在工作台区域，非操作系统全屏（沙箱内无法请求 OS 全屏）。
 - 账号密码 / 短信的纯 HTTP 登录、以及读取运行中 Chrome 的 Cookie 文件，在多数现代环境下会被极验 / 文件锁 / App-Bound 加密阻断，仅作兜底。

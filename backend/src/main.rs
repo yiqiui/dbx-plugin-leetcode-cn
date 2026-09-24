@@ -1051,13 +1051,14 @@ impl LeetCodePlugin {
         Ok(data.get("favoriteQuestionList").cloned().unwrap_or_else(|| json!({ "questions": [], "totalLength": 0 })))
     }
 
-    /// Submission history for a question. Field names validated against leetcode.cn's schema
-    /// (`submissionList(questionSlug, limit){ submissions { id status lang runtime memory timestamp } }`);
-    /// a signed-in session is required at runtime (server returns an error otherwise).
+    /// Submission history for a question. `offset` and `limit` are both non-null
+    /// arguments on leetcode.cn's `submissionList`; omitting `offset` makes the server
+    /// answer "发生未知错误，请联系管理员" instead of data. Query copied verbatim from the
+    /// site's own bundle (chunks/…931ccbb0da.js), trimmed to the fields the UI reads.
     fn submission_list(&self, title_slug: &str) -> Result<Value, PluginError> {
         let data = self.graphql(
-            "query submissionList($questionSlug: String!, $limit: Int) { submissionList(questionSlug: $questionSlug, limit: $limit) { submissions { id status lang runtime memory timestamp } } }",
-            json!({ "questionSlug": title_slug, "limit": 20 }),
+            "query submissionList($offset: Int!, $limit: Int!, $questionSlug: String!) { submissionList(offset: $offset, limit: $limit, questionSlug: $questionSlug) { lastKey hasNext submissions { id status statusDisplay lang langVerboseName runtime memory timestamp url isPending frontendId title submissionComment { comment flagType } } } }",
+            json!({ "questionSlug": title_slug, "offset": 0, "limit": 20 }),
         )?;
         Ok(data.get("submissionList").cloned().unwrap_or(Value::Null))
     }
@@ -1070,13 +1071,27 @@ impl LeetCodePlugin {
         } else {
             inputs.to_string()
         };
-        let payload = json!({
-            "data_input": data_input,
-            "question_id": question_id,
-            "lang": lang,
-            "codedetail": code,
-            "judge_type": "general"
-        });
+        // leetcode.cn takes a JSON body here and reads the code from `typed_code`;
+        // the legacy `codedetail` + `judge_type` shape is what makes the site answer
+        // {"error":"解答提交 POST 数据丢失，请刷新此页面。"}. Submit additionally carries
+        // the (nullable) study-plan / favourite context and no data_input, because it
+        // judges the full test set.
+        let payload = if submit {
+            json!({
+                "lang": lang,
+                "question_id": question_id,
+                "typed_code": code,
+                "study_plan_slug": Value::Null,
+                "favorite_slug": Value::Null
+            })
+        } else {
+            json!({
+                "lang": lang,
+                "question_id": question_id,
+                "typed_code": code,
+                "data_input": data_input
+            })
+        };
         let path = if submit { "submit" } else { "interpret_solution" };
         let url = format!("{BASE}/problems/{title_slug}/{path}/");
         let (status, body) = self.request_json("POST", &url, Some(payload), None, true)?;
@@ -1087,15 +1102,28 @@ impl LeetCodePlugin {
             .get(if submit { "submission_id" } else { "interpret_id" })
             .and_then(|v| v.as_str().map(|s| s.to_string()).or_else(|| v.as_i64().map(|n| n.to_string())))
             .ok_or_else(|| err(format!("no judge id in response: {body}")))?;
-        // Poll for the verdict.
-        let check_url = format!("{BASE}/problems/{title_slug}/check/?submissionId={id}&format=json");
-        for _ in 0..60 {
+        // Poll the submission detail endpoints the site itself uses: submissions go to
+        // /v2/check/, run results to /check/. `state` is PENDING / SUCCESS / FAILURE /
+        // REVOKED (anything else is still judging) — the legacy "Finished" value never
+        // appears here, which is why every run used to burn the whole poll budget and
+        // report a timeout even though the judge had already accepted the answer.
+        let check_url = if submit {
+            format!("{BASE}/submissions/detail/{id}/v2/check/")
+        } else {
+            format!("{BASE}/submissions/detail/{id}/check/")
+        };
+        let mut delay_ms = 400u64;
+        for _ in 0..45 {
             let (_, check) = self.request_json("GET", &check_url, None, None, false)?;
-            let finished = check.get("state").and_then(Value::as_str).map(|s| s == "Finished").unwrap_or(false);
-            if finished {
+            let state = check.get("state").and_then(Value::as_str).unwrap_or("");
+            if state == "SUCCESS" {
                 return Ok(self.normalize_result(&check));
             }
-            std::thread::sleep(std::time::Duration::from_millis(1000));
+            if state == "FAILURE" || state == "REVOKED" {
+                return Err(err(format!("判题未完成：服务端返回 {state}")));
+            }
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            delay_ms = (delay_ms * 2).min(1500);
         }
         Err(err("判题超时（轮询未完成）"))
     }
@@ -1112,17 +1140,42 @@ impl LeetCodePlugin {
             20 => "Compile Error",
             _ => "Pending / Unknown",
         };
+        // The check endpoints answer with `std_output` (run results also carry
+        // `std_output_list`), not the `code_output` / `expected_output` pair the old
+        // per-problem check URL used, so fall back across both spellings.
+        let std_output = check
+            .get("std_output")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| {
+                check
+                    .get("std_output_list")
+                    .and_then(Value::as_array)
+                    .and_then(|list| list.last())
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            });
+        let text = |keys: &[&str]| -> Option<String> {
+            keys.iter().find_map(|key| check.get(*key).and_then(Value::as_str).map(str::to_string))
+        };
         json!({
             "status": status_label,
             "statusLabel": status_label,
             "statusCode": status,
+            "submissionId": check.get("submission_id").or_else(|| check.get("check_id")),
             "runtime": check.get("status_runtime").and_then(Value::as_str),
             "memory": check.get("status_memory").and_then(Value::as_str),
-            "expectedOutput": check.get("expected_output"),
-            "codeOutput": check.get("code_output"),
-            "compileError": check.get("compile_error"),
-            "error": check.get("error"),
-            "message": check.get("message"),
+            "expectedOutput": text(&["expected_output"]),
+            "codeOutput": std_output.or_else(|| text(&["code_output"])),
+            "compileError": text(&["compile_error", "full_compile_error"]),
+            "runtimeError": text(&["runtime_error", "full_runtime_error"]),
+            "error": text(&["error"]),
+            "message": text(&["message"]),
+            "passed": check.get("total_correct").and_then(Value::as_i64),
+            "total": check.get("total_testcases").and_then(Value::as_i64),
+            "lastFailedTestcase": check.get("last_testcase").and_then(Value::as_str),
+            "compareResult": check.get("compare_result").and_then(Value::as_str),
+            "state": check.get("state").and_then(Value::as_str),
         })
     }
 

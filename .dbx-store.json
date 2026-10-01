@@ -1,0 +1,26 @@
+{
+  "name": "Terminal Emulator",
+  "description": "DBX 刷题插件：题库/每日一题/收藏/学习计划/探险模式/运行与提交，支持 Cookie 登录。",
+  "icon": "assets/plugin.svg",
+  "tags": [
+    "leetcode",
+    "terminal",
+    "practice"
+  ],
+  "permissions": [
+    "host.events",
+    "host.binary",
+    "host.workbench",
+    "host.storage"
+  ],
+  "source": "https://github.com/yiqiui/dbx-plugin-leetcode-cn",
+  "homepage": "https://github.com/yiqiui/dbx-plugin-leetcode-cn",
+  "license": "Apache-2.0",
+  "releaseNotes": "0.3.12：手动粘贴 Cookie（分步引导）、测试失败详情展示、探险模式跳转修复、受控登录浏览器直连。",
+  "localizations": {
+    "zh-CN": {
+      "name": "LeetCode 刷题",
+      "description": "力扣中国刷题插件：题库浏览、代码运行与提交、学习计划与探险模式。"
+    }
+  }
+}

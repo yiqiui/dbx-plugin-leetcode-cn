@@ -162,13 +162,13 @@
           <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12px" class="muted">
             <div><b style="color:var(--brand)">第 1 步</b>：浏览器打开并登录 leetcode.cn → 按 F12 → Application（应用）→ Cookies → https://leetcode.cn</div>
             <div><b style="color:var(--brand)">第 2 步（必须）</b>：找到名为 <b>LEETCODE_SESSION</b> 的行，复制它的 <b>Value（值）</b> 整段粘贴到下面第一个框</div>
-            <div><b style="color:var(--brand)">第 3 步（强烈建议）</b>：找到名为 <b>csrftoken</b> 的行，复制它的 Value 填到第二个框——<b>不填的话能登录，但「运行/提交」会静默失败</b></div>
+            <div><b style="color:var(--brand)">第 3 步（选填）</b>：找到名为 <b>csrftoken</b> 的行，复制它的 Value 填到第二个框（可填可不填；若遇到运行/提交被拒绝，再回来补填即可）</div>
           </div>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
             <textarea id="cookieSession" rows="4" placeholder="第 2 步：粘贴 LEETCODE_SESSION 的值（整段，很长的那个）；或直接粘贴整个 Cookie 字符串，会自动提取" style="width:100%;font-size:12px;font-family:var(--font-mono,monospace)"></textarea>
             <input id="cookieCsrf" placeholder="第 3 步：粘贴 csrftoken 的值（不填将无法运行/提交）" style="width:100%;font-size:12px" />
             <button type="button" id="manualCookieBtn" class="primary" style="width:100%">用 Cookie 登录</button>
-            <div id="cookieWarn" class="muted" style="font-size:11px;color:#e0a800;display:none">⚠ 未填 csrftoken：可以登录，但「运行 / 提交」会静默失败。建议回去补上 csrftoken。</div>
+            <div id="cookieWarn" class="muted" style="font-size:11px;color:#e0a800;display:none">提示：csrftoken 未填（选填）。若之后「运行 / 提交」被拒绝（403），回来补填即可。</div>
           </div>
         </details>
       </div>
@@ -1098,14 +1098,17 @@ $1 $2
                 <button type="button" data-open="/leetbook/${esc(book.slug)}/">开始阅读</button>
               </div>`).join("") || '<span class="muted">没有可显示的 LeetBook</span>'}</div>`;
           } else {
-            // 探险模式没有可公开调用的列表接口（内容按会话下发），给出明确说明而不是空白页。
-            $("#sectionSub").textContent = "探险模式的关卡由力扣按会话下发，插件暂无稳定的列表接口，点击可在浏览器中查看。";
-            body.innerHTML = `<div class="cards">
-              <div class="cardx"><div class="t">数据结构与算法</div><div class="d">35 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
-              <div class="cardx"><div class="t">数据库</div><div class="d">5 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
-              <div class="cardx"><div class="t">系统与软件设计</div><div class="d">5 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
-              <div class="cardx"><div class="t">数学</div><div class="d">7 关卡</div><button type="button" data-open="/explore/">打开探险模式</button></div>
-            </div>`;
+            // 旧版 /explore/ 已被力扣下线（500）；探险卡片改为展示线上真实存在的题单目录，
+            // 每个分类跳转到对应的 /studyplan/<slug>/ 页面（浏览器打开）。
+            const catalogs = await call("leetcode/study_plans", { catalogSlug: "" }, 30000);
+            const list = catalogs.catalogs || [];
+            $("#sectionSub").textContent = `共 ${list.length} 个分类 · 点击在浏览器中打开对应题单`;
+            body.innerHTML = `<div class="cards">${list.map((c) => `
+              <div class="cardx">
+                <div class="t">${esc(c.name)}</div>
+                <div class="d">${esc(c.highlight || "")}</div>
+                <button type="button" data-open="/studyplan/${esc(c.slug)}/">打开探险模式</button>
+              </div>`).join("") || '<span class="muted">暂无可展示的分类</span>'}</div>`;
           }
           body.querySelectorAll("button[data-open]").forEach((btn) => btn.addEventListener("click", async () => {
             try { await call("leetcode/open_site", { path: btn.dataset.open }, 15000); }

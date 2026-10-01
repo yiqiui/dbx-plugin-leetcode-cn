@@ -1,11 +1,11 @@
 {
-  "name": "Terminal Emulator",
+  "name": "LeetCode 刷题",
   "description": "DBX 刷题插件：题库/每日一题/收藏/学习计划/探险模式/运行与提交，支持 Cookie 登录。",
   "icon": "assets/plugin.svg",
   "tags": [
     "leetcode",
-    "terminal",
-    "practice"
+    "practice",
+    "algorithms"
   ],
   "permissions": [
     "host.events",

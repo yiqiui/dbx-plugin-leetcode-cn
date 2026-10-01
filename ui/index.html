@@ -157,6 +157,14 @@
         <button type="button" id="oneClickLoginBtn" class="primary" style="width:100%">用浏览器登录并自动导入（推荐，免粘贴）</button>
         <div class="muted" id="oneClickHint" style="font-size:12px;min-height:16px"></div>
         <div id="loginMsg" class="muted"></div>
+        <details id="manualCookieBox" style="margin-top:10px">
+          <summary style="cursor:pointer;font-size:12px;color:var(--brand)">手动粘贴 Cookie（浏览器登录失败时用）</summary>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            <textarea id="cookieSession" rows="4" placeholder="粘贴 LEETCODE_SESSION 的值（浏览器 F12 → Application → Cookies → leetcode.cn），也可以直接粘贴整个 Cookie 字符串，会自动提取" style="width:100%;font-size:12px;font-family:var(--font-mono,monospace)"></textarea>
+            <input id="cookieCsrf" placeholder="csrftoken（可选，粘贴 Cookie 串时会自动提取）" style="width:100%;font-size:12px" />
+            <button type="button" id="manualCookieBtn" class="primary" style="width:100%">用 Cookie 登录</button>
+          </div>
+        </details>
       </div>
     </div>
 
@@ -883,7 +891,39 @@ $1 $2
 
       let oneClickTimer = null;
       function stopOneClickPoll() { if (oneClickTimer) { clearTimeout(oneClickTimer); oneClickTimer = null; } }
-      async function doOneClickLogin() {
+      function parseCookieInput(raw) {
+        const text = (raw || "").trim();
+        if (!text) return { session: "", csrf: "" };
+        let session = "", csrf = "";
+        const sessionMatch = text.match(/LEETCODE_SESSION\s*[=:]\s*([^\s;,"']+)/i);
+        if (sessionMatch) session = sessionMatch[1];
+        const csrfMatch = text.match(/csrftoken\s*[=:]\s*([^\s;,"']+)/i);
+        if (csrfMatch) csrf = csrfMatch[1];
+        if (!session && !text.includes("=") && !text.includes(";")) session = text;
+        return { session, csrf };
+      }
+
+      async function manualCookieLogin() {
+        const btn = $("#manualCookieBtn");
+        const merged = $("#cookieSession").value + "\n" + $("#cookieCsrf").value;
+        const { session, csrf } = parseCookieInput(merged);
+        if (!session) { $("#loginMsg").textContent = "请先粘贴 LEETCODE_SESSION 的值。"; return; }
+        btn.disabled = true;
+        $("#loginMsg").textContent = "校验 Cookie 中…";
+        try {
+          const r = await call("leetcode/login_cookie", { session, csrf }, 20000);
+          $("#loginMsg").textContent = "";
+          await afterLogin(r, "Cookie 登录");
+        } catch (e) {
+          $("#loginMsg").textContent = "Cookie 登录失败：" + e.message;
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      $("#manualCookieBtn").addEventListener("click", manualCookieLogin);
+
+      async function oneClickLogin() {
         const hint = () => $("#oneClickHint");
         stopOneClickPoll();
         $("#oneClickLoginBtn").disabled = true;

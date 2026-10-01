@@ -6,3 +6,4 @@ node_modules/
 .artifact.json
 
 backend/Cargo.lock
+.cargo/

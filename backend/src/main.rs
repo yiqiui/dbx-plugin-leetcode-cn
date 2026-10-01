@@ -1155,8 +1155,22 @@ impl LeetCodePlugin {
                     .and_then(Value::as_str)
                     .map(str::to_string)
             });
+        // interpret/submit 接口的逐用例字段是数组（code_answer / expected_code_answer /
+        // expected_code_output / std_output_list），按行拼接成可读文本。
         let text = |keys: &[&str]| -> Option<String> {
-            keys.iter().find_map(|key| check.get(*key).and_then(Value::as_str).map(str::to_string))
+            keys.iter().find_map(|key| match check.get(*key) {
+                Some(Value::String(s)) => Some(s.clone()),
+                Some(Value::Array(list)) => Some(
+                    list.iter()
+                        .map(|item| match item {
+                            Value::String(s) => s.clone(),
+                            other => other.to_string(),
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                ),
+                _ => None,
+            })
         };
         json!({
             "status": status_label,
@@ -1165,8 +1179,10 @@ impl LeetCodePlugin {
             "submissionId": check.get("submission_id").or_else(|| check.get("check_id")),
             "runtime": check.get("status_runtime").and_then(Value::as_str),
             "memory": check.get("status_memory").and_then(Value::as_str),
-            "expectedOutput": text(&["expected_output"]),
-            "codeOutput": std_output.or_else(|| text(&["code_output"])),
+            "expectedOutput": text(&["expected_output", "expected_code_output", "expected_code_answer"]),
+            "codeOutput": std_output
+                .or_else(|| text(&["code_output"]))
+                .or_else(|| text(&["code_answer"])),
             "compileError": text(&["compile_error", "full_compile_error"]),
             "runtimeError": text(&["runtime_error", "full_runtime_error"]),
             "error": text(&["error"]),
@@ -1518,6 +1534,41 @@ impl PluginHandler for LeetCodePlugin {
             "leetcode/submit_code" => self.judge(&get_str("titleSlug"), &get_str("lang"), &get_str("code"), "", true),
             other => Err(PluginError::new(-32601, format!("unknown method: {other}"))),
         }
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_result_maps_interpret_arrays() {
+        let plugin = LeetCodePlugin::default();
+        let check = json!({
+            "status_code": 11,
+            "total_correct": 1,
+            "total_testcases": 2,
+            "code_answer": ["1", "2"],
+            "expected_code_answer": ["1", "3"],
+            "code_output": ["1", "2"]
+        });
+        let r = plugin.normalize_result(&check);
+        assert_eq!(r["expectedOutput"], "1\n3");
+        assert_eq!(r["codeOutput"], "1\n2");
+    }
+
+    #[test]
+    fn normalize_result_maps_expected_code_output() {
+        let plugin = LeetCodePlugin::default();
+        let check = json!({
+            "status_code": 11,
+            "expected_code_output": ["expected line"],
+            "code_output": ["actual line"]
+        });
+        let r = plugin.normalize_result(&check);
+        assert_eq!(r["expectedOutput"], "expected line");
+        assert_eq!(r["codeOutput"], "actual line");
     }
 }
 

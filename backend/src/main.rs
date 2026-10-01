@@ -1216,6 +1216,9 @@ impl LeetCodePlugin {
             .arg(format!("--user-data-dir={}", profile.display()))
             .arg("--no-first-run")
             .arg("--no-default-browser-check")
+            // 系统代理会劫持受控浏览器访问 leetcode.cn（issue #5 的根因）：
+            // 力扣是国内站点，登录窗口直连不走代理。
+            .arg("--no-proxy-server")
             .arg("--class=DBXLeetCodeLogin")
             .arg(format!("--app={url}"))
             .spawn()

@@ -159,10 +159,16 @@
         <div id="loginMsg" class="muted"></div>
         <details id="manualCookieBox" style="margin-top:10px">
           <summary style="cursor:pointer;font-size:12px;color:var(--brand)">手动粘贴 Cookie（浏览器登录失败时用）</summary>
+          <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;font-size:12px" class="muted">
+            <div><b style="color:var(--brand)">第 1 步</b>：浏览器打开并登录 leetcode.cn → 按 F12 → Application（应用）→ Cookies → https://leetcode.cn</div>
+            <div><b style="color:var(--brand)">第 2 步（必须）</b>：找到名为 <b>LEETCODE_SESSION</b> 的行，复制它的 <b>Value（值）</b> 整段粘贴到下面第一个框</div>
+            <div><b style="color:var(--brand)">第 3 步（强烈建议）</b>：找到名为 <b>csrftoken</b> 的行，复制它的 Value 填到第二个框——<b>不填的话能登录，但「运行/提交」会静默失败</b></div>
+          </div>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-            <textarea id="cookieSession" rows="4" placeholder="粘贴 LEETCODE_SESSION 的值（浏览器 F12 → Application → Cookies → leetcode.cn），也可以直接粘贴整个 Cookie 字符串，会自动提取" style="width:100%;font-size:12px;font-family:var(--font-mono,monospace)"></textarea>
-            <input id="cookieCsrf" placeholder="csrftoken（可选，粘贴 Cookie 串时会自动提取）" style="width:100%;font-size:12px" />
+            <textarea id="cookieSession" rows="4" placeholder="第 2 步：粘贴 LEETCODE_SESSION 的值（整段，很长的那个）；或直接粘贴整个 Cookie 字符串，会自动提取" style="width:100%;font-size:12px;font-family:var(--font-mono,monospace)"></textarea>
+            <input id="cookieCsrf" placeholder="第 3 步：粘贴 csrftoken 的值（不填将无法运行/提交）" style="width:100%;font-size:12px" />
             <button type="button" id="manualCookieBtn" class="primary" style="width:100%">用 Cookie 登录</button>
+            <div id="cookieWarn" class="muted" style="font-size:11px;color:#e0a800;display:none">⚠ 未填 csrftoken：可以登录，但「运行 / 提交」会静默失败。建议回去补上 csrftoken。</div>
           </div>
         </details>
       </div>
@@ -908,6 +914,7 @@ $1 $2
         const merged = $("#cookieSession").value + "\n" + $("#cookieCsrf").value;
         const { session, csrf } = parseCookieInput(merged);
         if (!session) { $("#loginMsg").textContent = "请先粘贴 LEETCODE_SESSION 的值。"; return; }
+        $("#cookieWarn").style.display = csrf ? "none" : "block";
         btn.disabled = true;
         $("#loginMsg").textContent = "校验 Cookie 中…";
         try {
@@ -1198,6 +1205,16 @@ $1 $2
         window.addEventListener("mouseup", () => { if (dragging) { dragging = false; sp.classList.remove("dragging"); } });
       })();
 
+      const showFatal = (msg) => {
+        const box = $("#result");
+        if (box) { box.classList.add("bad"); box.textContent = msg; }
+        else { alert(msg); }
+      };
+      window.addEventListener("error", (event) => showFatal(`[页面异常] ${event.message} @ ${event.filename}:${event.lineno}`));
+      window.addEventListener("unhandledrejection", (event) => {
+        const reason = event.reason;
+        showFatal(`[未处理异常] ${reason && (reason.stack || reason.message || String(reason))}`);
+      });
       window.dbxPlugin.ready.then(async () => {
         renderCats();
         renderCompanies();
